@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CB Index PnL Attribution Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{min-height:100vh;background:linear-gradient(145deg,#020617 0%,#0f172a 50%,#020617 100%);color:#e2e8f0;font-family:'Inter',-apple-system,sans-serif;padding:32px 24px}
+  .container{max-width:1340px;margin:0 auto}
+  .header{display:flex;align-items:center;gap:14px;margin-bottom:4px}
+  .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff}
+  .header h1{font-size:24px;font-weight:800;letter-spacing:-0.5px}
+  .header-sub{font-size:12px;color:#64748b}
+
+  /* Mode toggle */
+  .mode-toggle{display:flex;gap:0;margin:20px 0;background:rgba(15,23,42,0.6);border-radius:10px;padding:4px;width:fit-content;border:1px solid #1e293b}
+  .mode-btn{background:transparent;color:#64748b;border:none;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;transition:all .2s;font-family:inherit}
+  .mode-btn.active{background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff}
+  .mode-btn:hover:not(.active){color:#94a3b8}
+
+  .drop-zone{border:2px dashed #334155;border-radius:14px;padding:30px 20px;text-align:center;background:rgba(15,23,42,0.3);cursor:pointer;transition:all .2s}
+  .drop-zone:hover{border-color:#3b82f6;background:rgba(59,130,246,0.04)}
+  .drop-zone.drag-over{border-color:#3b82f6;background:rgba(59,130,246,0.08)}
+  .drop-zone.loaded{border:2px solid #22c55e;background:rgba(34,197,94,0.04)}
+  .drop-zone .label{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#64748b;margin-bottom:6px}
+  .drop-zone .filename{font-size:18px;font-weight:700;color:#94a3b8;margin-bottom:4px}
+  .drop-zone.loaded .filename{color:#22c55e}
+  .drop-zone .hint{font-size:12px;color:#475569}
+
+  .drop-row{display:flex;gap:16px;margin:20px 0;align-items:center}
+  .drop-arrow{font-size:28px;color:#334155;font-weight:800;padding:0 4px}
+
+  /* Multi-file zone */
+  .multi-drop{border:2px dashed #334155;border-radius:14px;padding:40px 24px;text-align:center;background:rgba(15,23,42,0.3);cursor:pointer;transition:all .2s;margin:20px 0}
+  .multi-drop:hover{border-color:#3b82f6}
+  .multi-drop.drag-over{border-color:#3b82f6;background:rgba(59,130,246,0.08)}
+  .multi-drop.loaded{border-color:#22c55e;background:rgba(34,197,94,0.03)}
+  .file-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;justify-content:center}
+  .file-chip{background:rgba(34,197,94,0.1);border:1px solid #166534;border-radius:6px;padding:4px 10px;font-size:11px;color:#86efac;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:6px}
+  .file-chip .remove{cursor:pointer;color:#ef4444;font-weight:700;font-size:14px}
+
+  .perf-input-row{display:flex;align-items:center;gap:14px;margin-bottom:24px;background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:14px 20px;flex-wrap:wrap}
+  .perf-input-row label{font-size:13px;font-weight:600;color:#94a3b8}
+  .perf-input-row input{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 12px;font-size:14px;width:120px;font-family:'JetBrains Mono',monospace;text-align:right;outline:none}
+  .perf-input-row input:focus{border-color:#3b82f6}
+  .perf-input-row .unit{font-size:14px;color:#64748b;font-weight:600}
+  .apply-btn{background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .apply-btn:hover{opacity:0.85}
+  .perf-status{font-size:12px;color:#22c55e;font-weight:600}
+
+  .error-box{background:rgba(239,68,68,0.1);border:1px solid #7f1d1d;border-radius:8px;padding:12px 16px;margin-bottom:20px;color:#fca5a5;font-size:13px}
+  .cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+  .card{background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:16px 18px;flex:1 1 150px;min-width:130px}
+  .card .card-label{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;margin-bottom:6px}
+  .card .card-value{font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace}
+  .card .card-sub{font-size:11px;color:#475569;margin-top:4px}
+
+  .recon-box{background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:20px 24px;margin-bottom:24px}
+  .recon-title{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;margin-bottom:16px}
+  .recon-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px}
+  .recon-row.indent{padding-left:20px;font-size:12px;color:#94a3b8}
+  .recon-row.total{border-top:2px solid #334155;margin-top:6px;padding-top:10px;font-weight:700;font-size:14px}
+  .recon-row.gap{border-top:1px dashed #334155;margin-top:6px;padding-top:8px;font-weight:700}
+  .recon-val{font-family:'JetBrains Mono',monospace;font-weight:700}
+
+  .chart-box{background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:20px;margin-bottom:24px}
+  .chart-title{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;margin-bottom:12px}
+
+  .wf-row{display:flex;gap:16px;margin-bottom:24px}
+  .wf-half{flex:1}
+  .waterfall-box{background:rgba(15,23,42,0.5);border-radius:10px;padding:18px 20px;border:1px solid #1e293b;height:100%}
+  .waterfall-title{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;margin-bottom:14px}
+  .waterfall{display:flex;align-items:flex-end;gap:6px;height:130px}
+  .wf-col{flex:1;display:flex;flex-direction:column;align-items:center}
+  .wf-val{font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:700;margin-bottom:4px}
+  .wf-bar-wrap{display:flex;flex-direction:column;justify-content:flex-end;height:90px;width:100%}
+  .wf-bar{border-radius:4px;min-width:30px;transition:height .4s ease}
+  .wf-label{font-size:10px;color:#64748b;margin-top:6px;text-align:center}
+
+  .stats-bar{background:rgba(15,23,42,0.5);border-radius:8px;padding:10px 16px;margin-bottom:20px;display:flex;gap:20px;font-size:12px;color:#64748b;flex-wrap:wrap}
+  .stats-bar strong{font-weight:700}
+
+  .tabs{display:flex;gap:0;border-bottom:1px solid #1e293b;margin-bottom:16px;align-items:center;flex-wrap:wrap}
+  .tab{background:transparent;color:#64748b;border:none;padding:10px 20px;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;font-family:inherit}
+  .tab:hover{color:#94a3b8}
+  .tab.active{background:#1e293b;color:#e2e8f0;font-weight:700;border-bottom-color:#3b82f6}
+  .tab-spacer{flex:1}
+  .export-btn{background:transparent;border:1px solid #334155;color:#94a3b8;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;margin-left:6px}
+  .export-btn:hover{border-color:#3b82f6;color:#e2e8f0}
+  .export-btn.xl{background:rgba(34,197,94,0.1);border-color:#166534;color:#86efac}
+
+  .table-wrap{overflow-x:auto;overflow-y:auto;border-radius:8px;border:1px solid #1e293b}
+  .table-wrap table{width:100%;border-collapse:collapse;font-size:12px;font-family:'JetBrains Mono',monospace}
+  .table-wrap th{position:sticky;top:0;z-index:2;background:#0f172a;color:#94a3b8;padding:10px 10px;text-align:right;cursor:pointer;white-space:nowrap;border-bottom:2px solid #1e293b;font-size:10px;text-transform:uppercase;letter-spacing:1px;user-select:none}
+  .table-wrap th.left{text-align:left}
+  .table-wrap th:hover{color:#e2e8f0}
+  .table-wrap td{padding:7px 10px;text-align:right;white-space:nowrap;color:#cbd5e1;border-bottom:1px solid #0f172a}
+  .table-wrap td.left{text-align:left}
+  .table-wrap tr:nth-child(even){background:rgba(15,23,42,0.3)}
+
+  .section-label{font-size:13px;font-weight:700;margin-bottom:8px}
+  .section-gap{margin-top:24px}
+  .method{margin-top:32px;color:#475569;font-size:12px}
+  .method summary{cursor:pointer;font-weight:600;color:#64748b}
+  .method .content{margin-top:10px;line-height:1.8;max-width:750px}
+  .empty{text-align:center;padding:60px 20px;color:#475569}
+  .empty .icon{font-size:40px;margin-bottom:16px;opacity:0.3}
+  .empty .title{font-size:15px;font-weight:600;margin-bottom:6px}
+
+  .pos{color:#22c55e}.neg{color:#ef4444}.neu{color:#94a3b8}
+  .bg-pos{background:rgba(34,197,94,0.08)}.bg-neg{background:rgba(239,68,68,0.08)}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo">Δ</div>
+    <div>
+      <h1>CB Index PnL Attribution</h1>
+      <div class="header-sub">FTSE Convertible Bond Index — Attribution (bps), Réconciliation & Recap Mensuel</div>
+    </div>
+  </div>
+
+  <div class="mode-toggle">
+    <button class="mode-btn active" data-mode="daily">📅 Attribution Journalière</button>
+    <button class="mode-btn" data-mode="monthly">📊 Récap Mensuel</button>
+  </div>
+
+  <!-- ═══════════ DAILY MODE ═══════════ -->
+  <div id="dailyMode">
+    <div class="drop-row">
+      <div class="drop-zone" id="dropT0" style="flex:1"><div class="label">Date T₀ (veille)</div><div class="filename" id="nameT0">Fichier T₀</div><div class="hint" id="hintT0">Glisser-déposer ou cliquer</div><input type="file" accept=".xls,.xlsx" style="display:none" id="inputT0"></div>
+      <div class="drop-arrow">→</div>
+      <div class="drop-zone" id="dropT1" style="flex:1"><div class="label">Date T₁ (jour)</div><div class="filename" id="nameT1">Fichier T₁</div><div class="hint" id="hintT1">Glisser-déposer ou cliquer</div><input type="file" accept=".xls,.xlsx" style="display:none" id="inputT1"></div>
+    </div>
+    <div class="perf-input-row"><label>Perf réelle (en %) :</label><input type="text" id="realPerfD" placeholder="-0.48"><span class="unit">%</span><button class="apply-btn" id="applyPerfD">Appliquer</button><span class="perf-status hidden" id="perfStatusD"></span></div>
+    <div id="errorD" class="error-box hidden"></div>
+    <div id="dailyResults" class="hidden">
+      <div class="cards" id="dCardsRow"></div>
+      <div class="recon-box hidden" id="dReconBox"><div class="recon-title">Réconciliation — Théorique vs Réelle</div><div id="dReconContent"></div></div>
+      <div class="stats-bar" id="dStatsBar"></div>
+      <div class="wf-row"><div class="wf-half"><div class="waterfall-box"><div class="waterfall-title">Attribution Théorique (bps)</div><div class="waterfall" id="dWfTheo"></div></div></div><div class="wf-half hidden" id="dWfRealHalf"><div class="waterfall-box"><div class="waterfall-title">Réconciliation</div><div class="waterfall" id="dWfRecon"></div></div></div></div>
+      <div class="tabs" id="dTabs"><button class="tab active" data-tab="sector">Par Secteur</button><button class="tab" data-tab="region">Par Région</button><button class="tab" data-tab="issuer">Par Émetteur</button><button class="tab" data-tab="top">Top / Bottom</button><button class="tab" data-tab="detail">Détail</button><div class="tab-spacer"></div><button class="export-btn" id="dExportCSV">↓ CSV</button></div>
+      <div id="dTabContent"></div>
+    </div>
+    <div id="dEmpty" class="empty"><div class="icon">📅</div><div class="title">Chargez deux fichiers UCBINDEX (T₀ et T₁)</div><div>Formats : .xls, .xlsx</div></div>
+  </div>
+
+  <!-- ═══════════ MONTHLY MODE ═══════════ -->
+  <div id="monthlyMode" class="hidden">
+    <div class="multi-drop" id="multiDrop">
+      <div class="label">Fichiers du mois</div>
+      <div class="filename" id="multiName">Glisser tous les fichiers quotidiens ici</div>
+      <div class="hint" id="multiHint">UCBINDEX_YYYYMMDD.xls — Minimum 2 fichiers pour calculer</div>
+      <input type="file" accept=".xls,.xlsx" multiple style="display:none" id="multiInput">
+      <div class="file-list" id="fileList"></div>
+    </div>
+    <div class="perf-input-row"><label>Perf réelle du mois (en %) :</label><input type="text" id="realPerfM" placeholder="-1.25"><span class="unit">%</span><button class="apply-btn" id="applyPerfM">Appliquer</button><span class="perf-status hidden" id="perfStatusM"></span></div>
+    <div id="errorM" class="error-box hidden"></div>
+
+    <div id="monthlyResults" class="hidden">
+      <div class="cards" id="mCardsRow"></div>
+      <div class="recon-box hidden" id="mReconBox"><div class="recon-title">Réconciliation Mensuelle — Théorique vs Réelle</div><div id="mReconContent"></div></div>
+      <div class="stats-bar" id="mStatsBar"></div>
+
+      <!-- Chart -->
+      <div class="chart-box"><div class="chart-title">Performance Quotidienne par Région (bps)</div><div style="position:relative;height:350px;width:100%"><canvas id="cumChart"></canvas></div></div>
+
+      <!-- Waterfall -->
+      <div class="wf-row"><div class="wf-half"><div class="waterfall-box"><div class="waterfall-title">Attribution Cumulée du Mois (bps)</div><div class="waterfall" id="mWfTheo"></div></div></div><div class="wf-half hidden" id="mWfRealHalf"><div class="waterfall-box"><div class="waterfall-title">Réconciliation Mensuelle</div><div class="waterfall" id="mWfRecon"></div></div></div></div>
+
+      <div class="tabs" id="mTabs">
+        <button class="tab active" data-tab="daily">Jour par Jour</button>
+        <button class="tab" data-tab="msector">Par Secteur</button>
+        <button class="tab" data-tab="mregion">Par Région</button>
+        <button class="tab" data-tab="missuer">Par Émetteur</button><button class="tab" data-tab="mtop">Top / Bottom</button>
+        <button class="tab" data-tab="mdetail">Détail Obligations</button>
+        <div class="tab-spacer"></div>
+        <button class="export-btn xl" id="mExportXL">↓ Excel</button>
+        <button class="export-btn" id="mExportCSV">↓ CSV</button>
+      </div>
+      <div id="mTabContent"></div>
+    </div>
+    <div id="mEmpty" class="empty"><div class="icon">📊</div><div class="title">Chargez les fichiers quotidiens du mois</div><div>Minimum 2 fichiers pour commencer le calcul</div></div>
+  </div>
+
+  <details class="method">
+    <summary>Méthodologie de calcul</summary>
+    <div class="content">
+      <strong>Equity/Delta</strong> = (Delta/100) × Parity(t0) × (ΔEq/Eq)<br>
+      <strong>Gamma</strong> = ½ × Gamma × (Eq return %)²<br>
+      <strong>Crédit/Spread</strong> = Rho(10bp) × (ΔSpread / 10)<br>
+      <strong>Vega/Vol</strong> = Vega × ΔImplied Vol<br>
+      <strong>Résiduel</strong> = ΔCB − (Equity + Gamma + Crédit + Vega)<br>
+      <strong>Pondération</strong> = Poids(t0) / 100 × contribution<br>
+      <strong>Cumulé mensuel</strong> = Somme arithmétique des contributions quotidiennes<br>
+      <strong>Écart</strong> = Perf réelle − Σ théorique quotidien
+    </div>
+  </details>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// CORE ENGINE (shared)
+// ═══════════════════════════════════════════════════════════════════════
+function parseIndexFile(buffer,fileName){
+  const wb=XLSX.read(buffer,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];
+  const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  let hi=-1;for(let i=0;i<Math.min(raw.length,25);i++){if(raw[i]&&String(raw[i][0]).trim()==='MACE ID'){hi=i;break}}
+  if(hi<0)throw new Error('Header introuvable: '+fileName);
+  const headers=raw[hi].map(h=>String(h??'').trim());const ci={};headers.forEach((h,i)=>{if(!ci[h])ci[h]=i});
+  const get=(row,n)=>{const i=ci[n];return i!=null?row[i]:null};const bonds=[];
+  for(let i=hi+1;i<raw.length;i++){const row=raw[i];if(!row)continue;const m=row[0];if(m==null||isNaN(Number(m)))continue;
+    const num=n=>{const v=get(row,n);return v==null?NaN:Number(v)};
+    const issueName=String(get(row,'Issue')??'').trim(); if(!issueName||issueName==='Unknown')continue; bonds.push({maceId:String(Number(m)),isin:String(get(row,'ISIN')??''),issue:issueName,
+      bondCcy:String(get(row,'Bond Currency')??''),cbPrice:num('Convertible Price'),eqPrice:num('Equity Price'),
+      parity:num('Parity'),delta:num('Delta'),gamma:num('Gamma'),rho:num('Rho (10bp)'),vega:num('Vega'),
+      creditSpread:num('Credit Spread'),impliedVol:num('Implied Vol.'),weight:num('Index Weight'),
+      sector:String(get(row,'Sector')??''),region:String(get(row,'Region')??''),country:String(get(row,'Country')??''),
+      duration:num('Duration'),chi:num('Chi'),coupon:num('Coupon'),maturity:String(get(row,'Maturity')??'')});}
+  return bonds;
+}
+
+function computeAttr(t0,t1){
+  const m={};t1.forEach(b=>m[b.maceId]=b);const t0s=new Set(t0.map(b=>b.maceId));const t1s=new Set(t1.map(b=>b.maceId));
+  const entering=t1.filter(b=>!t0s.has(b.maceId)),leaving=t0.filter(b=>!t1s.has(b.maceId)),results=[];
+  t0.forEach(b0=>{const b1=m[b0.maceId];if(!b1)return;
+    const cbPnl=b1.cbPrice-b0.cbPrice;
+    const eqR=b0.eqPrice&&!isNaN(b0.eqPrice)&&b0.eqPrice!==0?((b1.eqPrice/b0.eqPrice-1)*100):0;
+    const eqC=(b0.delta/100)*(b0.parity||0)*(eqR/100);
+    const gaC=0.5*((b0.gamma||0)/100)*eqR*eqR;
+    const sC=(b0.rho||0)*(((b1.creditSpread||0)-(b0.creditSpread||0))/10);
+    const vC=(b0.vega||0)*((b1.impliedVol||0)-(b0.impliedVol||0));
+    const res=cbPnl-(eqC+gaC+sC+vC);const w=(b0.weight||0)/100;
+    results.push({...b0,cbPrice_t1:b1.cbPrice,eqPrice_t1:b1.eqPrice,spread_t1:b1.creditSpread,ivol_t1:b1.impliedVol,weight_t1:b1.weight,
+      cbPnl,eqRetPct:eqR,eqContrib:eqC,gammaContrib:gaC,creditContrib:sC,vegaContrib:vC,
+      spreadChange:(b1.creditSpread||0)-(b0.creditSpread||0),volChange:(b1.impliedVol||0)-(b0.impliedVol||0),
+      residual:res,w,wtdTotal:w*cbPnl,wtdEquity:w*eqC,wtdGamma:w*gaC,wtdCredit:w*sC,wtdVega:w*vC,wtdResidual:w*res});});
+  return{results,entering,leaving};
+}
+
+function groupBy(res,key){const g={};res.forEach(r=>{const k=r[key]||'Unknown';if(!g[k])g[k]={name:k,weight:0,count:0,wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdResidual:0};
+  const x=g[k];x.weight+=r.weight||0;x.count++;x.wtdTotal+=r.wtdTotal;x.wtdEquity+=r.wtdEquity;x.wtdGamma+=r.wtdGamma;x.wtdCredit+=r.wtdCredit;x.wtdVega+=r.wtdVega;x.wtdResidual+=r.wtdResidual});
+  return Object.values(g).sort((a,b)=>b.wtdTotal-a.wtdTotal);}
+
+function groupByIssuer(res){
+  const g={};
+  res.forEach(r=>{
+    const k=r.issue||'Unknown';
+    if(!g[k])g[k]={name:k,sector:r.sector||'',region:r.region||'',bondCcy:r.bondCcy||'',weight:0,count:0,
+      bonds:[],wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdResidual:0};
+    const x=g[k];x.weight+=r.weight||0;x.count++;
+    x.wtdTotal+=r.wtdTotal;x.wtdEquity+=r.wtdEquity;x.wtdGamma+=r.wtdGamma;
+    x.wtdCredit+=r.wtdCredit;x.wtdVega+=r.wtdVega;x.wtdResidual+=r.wtdResidual;
+    x.bonds.push(bondLabel(r));
+  });
+  return Object.values(g).sort((a,b)=>b.wtdTotal-a.wtdTotal);
+}
+
+function sumResults(res){const s=fn=>res.reduce((a,r)=>a+(fn(r)||0),0);
+  return{wtdTotal:s(r=>r.wtdTotal),wtdEquity:s(r=>r.wtdEquity),wtdGamma:s(r=>r.wtdGamma),wtdCredit:s(r=>r.wtdCredit),wtdVega:s(r=>r.wtdVega),wtdResidual:s(r=>r.wtdResidual),
+    nBonds:res.length,nPos:res.filter(r=>r.cbPnl>0).length,nNeg:res.filter(r=>r.cbPnl<0).length,avgEqRet:s(r=>r.eqRetPct*r.w)};}
+
+// Formatting
+const fmt=(v,d=4)=>(v==null||isNaN(v))?'—':v.toFixed(d);
+const fS=(v,d=4)=>(v==null||isNaN(v))?'—':(v>=0?'+':'')+v.toFixed(d);
+const fP=(v,d=2)=>(v==null||isNaN(v))?'—':(v>=0?'+':'')+((v)*100).toFixed(d);
+const fPpct=(v,d=4)=>(v==null||isNaN(v))?'—':(v>=0?'+':'')+v.toFixed(d)+'%';
+const p2=v=>(v==null||isNaN(v))?'—':(v>=0?'+':'')+v.toFixed(2)+'%';
+const cc=v=>v>0.0005?'pos':v<-0.0005?'neg':'neu';
+const bc=v=>v>0.0005?'bg-pos':v<-0.0005?'bg-neg':'';
+const ch=v=>v>0.0005?'#22c55e':v<-0.0005?'#ef4444':'#94a3b8';
+
+function extractDate(name){const m=name.match(/(\d{8})/);if(!m)return null;const s=m[1];return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);}
+function shortDate(d){return d.slice(5);}
+function bondLabel(r){
+  let name=r.issue||'';
+  let cpn='';
+  if(r.coupon!=null&&!isNaN(r.coupon)){cpn=r.coupon%1===0?r.coupon.toFixed(0):r.coupon.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');}
+  let mat='';
+  if(r.maturity){const s=String(r.maturity);const m=s.match(/(\d{4})/);if(m)mat=m[1];}
+  else if(r.matYear)mat=String(r.matYear);
+  return name+(cpn?' '+cpn+'%':'')+(mat?' '+mat:'');
+}  // MM-DD
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDERING UTILS
+// ═══════════════════════════════════════════════════════════════════════
+function renderCards(elId,cardData){
+  document.getElementById(elId).innerHTML=cardData.map(c=>`<div class="card"><div class="card-label">${c.label}</div><div class="card-value ${cc(c.value)}">${fP(c.value)} <span style="font-size:12px;font-weight:500;color:#64748b">bps</span></div>${c.sub?'<div class="card-sub">'+c.sub+'</div>':''}</div>`).join('');}
+
+function renderRecon(boxId,contentId,totals,realP){
+  const box=document.getElementById(boxId);const hasR=realP!==null&&!isNaN(realP);
+  if(!hasR){box.classList.add('hidden');return}
+  box.classList.remove('hidden');const gap=realP-totals.wtdTotal;
+  const rows=[{l:'Equity / Delta',v:totals.wtdEquity},{l:'Gamma',v:totals.wtdGamma},{l:'Crédit / Spread',v:totals.wtdCredit},{l:'Vega / Vol',v:totals.wtdVega},{l:'Résiduel bond-level',v:totals.wtdResidual}];
+  document.getElementById(contentId).innerHTML=rows.map(r=>`<div class="recon-row indent"><span>${r.l}</span><span class="recon-val ${cc(r.v)}">${fP(r.v)} bps</span></div>`).join('')+
+    `<div class="recon-row total"><span>= Performance Théorique</span><span class="recon-val ${cc(totals.wtdTotal)}">${fP(totals.wtdTotal)} bps</span></div>
+    <div class="recon-row gap"><span>+ Écart Inexpliqué</span><span class="recon-val" style="color:#f59e0b">${fP(gap)} bps</span></div>
+    <div class="recon-row total" style="font-size:16px"><span>= Performance Réelle</span><span class="recon-val ${cc(realP)}">${fP(realP)} bps</span></div>`;}
+
+function renderWF(elId,items){
+  const mx=Math.max(...items.map(i=>Math.abs(i.v)),0.001);
+  document.getElementById(elId).innerHTML=items.map(it=>{
+    const h=Math.max(4,(Math.abs(it.v)/mx)*80);const p=it.v>=0;
+    const bg=it.isTotal?'linear-gradient(135deg,#3b82f6,#8b5cf6)':it.isGap?'linear-gradient(135deg,#f59e0b,#d97706)':p?'linear-gradient(180deg,#22c55e,#15803d)':'linear-gradient(180deg,#dc2626,#ef4444)';
+    const ls=it.isTotal?'color:#e2e8f0;font-weight:700':it.isGap?'color:#f59e0b;font-weight:600':'';
+    return`<div class="wf-col"><div class="wf-val" style="color:${it.isGap?'#f59e0b':ch(it.v)}">${fP(it.v)}</div><div class="wf-bar-wrap" style="justify-content:${p?'flex-end':'flex-start'}"><div class="wf-bar" style="height:${h}px;background:${bg};opacity:${it.isTotal||it.isGap?1:0.8}"></div></div><div class="wf-label" style="${ls}">${it.label}</div></div>`;}).join('');}
+
+let sortSt={};
+function buildTable(container,cols,data,tid,mh){
+  if(!sortSt[tid])sortSt[tid]={col:null,asc:true};const st=sortSt[tid];let sorted=data;
+  if(st.col!==null){sorted=[...data].sort((a,b)=>{const va=cols[st.col].val(a),vb=cols[st.col].val(b);if(va==null)return 1;if(vb==null)return -1;return st.asc?(va>vb?1:-1):(va<vb?1:-1)});}
+  let h=`<div class="table-wrap" style="max-height:${mh||500}px"><table><thead><tr>`;
+  cols.forEach((c,i)=>{const ar=st.col===i?(st.asc?' ▲':' ▼'):'';h+=`<th class="${c.left?'left':''}" data-t="${tid}" data-c="${i}">${c.header}${ar}</th>`;});
+  h+='</tr></thead><tbody>';sorted.forEach(row=>{h+='<tr>';cols.forEach(c=>{const v=c.val(row);const d=c.fmt?c.fmt(v,row):String(v??'');const cls=[c.left?'left':'',c.clr?cc(v):'',c.bg?bc(v):''].filter(Boolean).join(' ');h+=`<td class="${cls}">${d}</td>`;});h+='</tr>';});
+  h+='</tbody></table></div>';container.innerHTML=h;
+  container.querySelectorAll('th[data-t]').forEach(th=>{th.addEventListener('click',()=>{const t=th.dataset.t,ci=parseInt(th.dataset.c);if(sortSt[t].col===ci)sortSt[t].asc=!sortSt[t].asc;else{sortSt[t].col=ci;sortSt[t].asc=true};renderCurrentTab()})});}
+
+const grpCols=[
+  {header:'Nom',val:r=>r.name,left:true,fmt:v=>v},
+  {header:'Poids(%)',val:r=>r.weight,fmt:v=>fmt(v,2)},
+  {header:'#',val:r=>r.count,fmt:v=>String(v)},
+  {header:'Total',val:r=>r.wtdTotal,fmt:v=>fP(v),clr:true,bg:true},
+  {header:'Equity',val:r=>r.wtdEquity,fmt:v=>fP(v),clr:true},
+  {header:'Gamma',val:r=>r.wtdGamma,fmt:v=>fP(v),clr:true},
+  {header:'Crédit',val:r=>r.wtdCredit,fmt:v=>fP(v),clr:true},
+  {header:'Vega',val:r=>r.wtdVega,fmt:v=>fP(v),clr:true},
+  {header:'Résiduel',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true}];
+
+const bndCols=[
+  {header:'Issue',val:r=>bondLabel(r),left:true,fmt:v=>(v||'').substring(0,28)},
+  {header:'Secteur',val:r=>r.sector,left:true,fmt:v=>(v||'').substring(0,14)},
+  {header:'Région',val:r=>r.region,left:true,fmt:v=>(v||'').substring(0,13)},
+  {header:'Poids(%)',val:r=>r.weight,fmt:v=>fmt(v,2)},
+  {header:'ΔCB',val:r=>r.cbPnl,fmt:v=>fS(v,2),clr:true},
+  {header:'Eq%',val:r=>r.eqRetPct,fmt:v=>p2(v),clr:true},
+  {header:'Wtd Tot',val:r=>r.wtdTotal,fmt:v=>fP(v),clr:true,bg:true},
+  {header:'Wtd Eq',val:r=>r.wtdEquity,fmt:v=>fP(v),clr:true},
+  {header:'Wtd Γ',val:r=>r.wtdGamma,fmt:v=>fP(v),clr:true},
+  {header:'Wtd Cr',val:r=>r.wtdCredit,fmt:v=>fP(v),clr:true},
+  {header:'Wtd V',val:r=>r.wtdVega,fmt:v=>fP(v),clr:true},
+  {header:'Wtd Res',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true}];
+
+const issuerCols=[
+  {header:'Émetteur',val:r=>r.name,left:true,fmt:v=>(v||'').substring(0,24)},
+  {header:'Secteur',val:r=>r.sector,left:true,fmt:v=>(v||'').substring(0,14)},
+  {header:'Région',val:r=>r.region,left:true,fmt:v=>(v||'').substring(0,13)},
+  {header:'Devise',val:r=>r.bondCcy,left:true,fmt:v=>v},
+  {header:'Poids(%)',val:r=>r.weight,fmt:v=>fmt(v,2)},
+  {header:'#Bonds',val:r=>r.count,fmt:v=>String(v)},
+  {header:'Obligations',val:r=>r.bonds.join(', '),left:true,fmt:v=>(v||'').substring(0,50)},
+  {header:'Total',val:r=>r.wtdTotal,fmt:v=>fP(v),clr:true,bg:true},
+  {header:'Equity',val:r=>r.wtdEquity,fmt:v=>fP(v),clr:true},
+  {header:'Gamma',val:r=>r.wtdGamma,fmt:v=>fP(v),clr:true},
+  {header:'Crédit',val:r=>r.wtdCredit,fmt:v=>fP(v),clr:true},
+  {header:'Vega',val:r=>r.wtdVega,fmt:v=>fP(v),clr:true},
+  {header:'Résiduel',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true}];
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAILY MODE
+// ═══════════════════════════════════════════════════════════════════════
+let dData=null,dTab='sector',dRealPerf=null,bondsT0=null,bondsT1=null;
+
+function renderDaily(){
+  if(!dData)return;const{results,entering,leaving}=dData;
+  document.getElementById('dEmpty').classList.add('hidden');document.getElementById('dailyResults').classList.remove('hidden');
+  const t=sumResults(results);const hasR=dRealPerf!==null;const gap=hasR?dRealPerf-t.wtdTotal:null;
+  const cd=[{label:hasR?'Perf Réelle':'Total Théo',value:hasR?dRealPerf:t.wtdTotal,sub:t.nBonds+' obligations'},
+    {label:'Equity',value:t.wtdEquity},{label:'Gamma',value:t.wtdGamma},{label:'Crédit',value:t.wtdCredit},
+    {label:'Vega',value:t.wtdVega},{label:'Résiduel',value:t.wtdResidual,sub:'Theta+FX+Autre'}];
+  if(hasR)cd.push({label:'Écart',value:gap,sub:'Rebal/Coupons/Timing'});
+  renderCards('dCardsRow',cd);renderRecon('dReconBox','dReconContent',t,dRealPerf);
+  document.getElementById('dStatsBar').innerHTML=`<span>↑ <strong class="pos">${t.nPos}</strong></span><span>↓ <strong class="neg">${t.nNeg}</strong></span><span>Eq wtd: <strong class="${cc(t.avgEqRet)}">${p2(t.avgEqRet)}</strong></span>${hasR?'<span>Écart: <strong style="color:#f59e0b">'+fP(gap)+' bps</strong></span>':''}`;
+  renderWF('dWfTheo',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Résiduel',v:t.wtdResidual},{label:'TOTAL',v:t.wtdTotal,isTotal:true}]);
+  const rh=document.getElementById('dWfRealHalf');if(hasR){rh.classList.remove('hidden');renderWF('dWfRecon',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Rés.',v:t.wtdResidual},{label:'Écart',v:gap,isGap:true},{label:'RÉEL',v:dRealPerf,isTotal:true}]);}else rh.classList.add('hidden');
+  renderDailyTab();}
+
+function renderDailyTab(){if(!dData)return;const{results}=dData;const c=document.getElementById('dTabContent');const s=[...results].sort((a,b)=>b.wtdTotal-a.wtdTotal);
+  if(dTab==='sector')buildTable(c,grpCols,groupBy(results,'sector'),'ds',600);
+  else if(dTab==='issuer')buildTable(c,issuerCols,groupByIssuer(results),'di',600);
+  else if(dTab==='region')buildTable(c,grpCols,groupBy(results,'region'),'dr',600);
+  else if(dTab==='top'){c.innerHTML='<div class="section-label pos">▲ Top 15</div><div id="dt1"></div><div class="section-gap"></div><div class="section-label neg">▼ Bottom 15</div><div id="dt2"></div>';buildTable(document.getElementById('dt1'),bndCols,s.slice(0,15),'dtp',400);buildTable(document.getElementById('dt2'),bndCols,s.slice(-15).reverse(),'dbt',400);}
+  else if(dTab==='detail')buildTable(c,bndCols,s,'dd',600);}
+
+let currentMode='daily';
+function renderCurrentTab(){if(currentMode==='daily')renderDailyTab();else renderMonthlyTab();}
+
+// Daily events
+function setupDrop(zId,iId,nId,hId,side){
+  const z=document.getElementById(zId),inp=document.getElementById(iId);
+  z.addEventListener('click',()=>inp.click());
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag-over')});
+  z.addEventListener('dragleave',()=>z.classList.remove('drag-over'));
+  const handle=f=>{z.classList.remove('drag-over');z.classList.add('loaded');document.getElementById(nId).textContent='✓ '+f.name;document.getElementById(hId).textContent=(f.size/1024).toFixed(0)+' KB';
+    const r=new FileReader();r.onload=e=>{try{const d=new Uint8Array(e.target.result);const b=parseIndexFile(d,f.name);if(side==='t0')bondsT0=b;else bondsT1=b;document.getElementById('errorD').classList.add('hidden');if(bondsT0&&bondsT1){dData=computeAttr(bondsT0,bondsT1);renderDaily()}}catch(err){document.getElementById('errorD').textContent='⚠ '+err.message;document.getElementById('errorD').classList.remove('hidden')}};r.readAsArrayBuffer(f);};
+  z.addEventListener('drop',e=>{e.preventDefault();if(e.dataTransfer.files[0])handle(e.dataTransfer.files[0])});inp.addEventListener('change',e=>{if(e.target.files[0])handle(e.target.files[0])});}
+setupDrop('dropT0','inputT0','nameT0','hintT0','t0');setupDrop('dropT1','inputT1','nameT1','hintT1','t1');
+
+document.getElementById('applyPerfD').addEventListener('click',()=>{const v=parseFloat(document.getElementById('realPerfD').value.replace(',','.'));dRealPerf=isNaN(v)?null:v;const st=document.getElementById('perfStatusD');if(dRealPerf!==null){st.classList.remove('hidden');st.textContent='✓ '+fP(dRealPerf)+' bps'}else st.classList.add('hidden');if(dData)renderDaily()});
+document.getElementById('realPerfD').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('applyPerfD').click()});
+document.querySelectorAll('#dTabs .tab').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('#dTabs .tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');dTab=b.dataset.tab;sortSt={};renderDailyTab()})});
+document.getElementById('dExportCSV').addEventListener('click',()=>{if(dData)exportCSV(dData.results)});
+
+// ═══════════════════════════════════════════════════════════════════════
+// MONTHLY MODE
+// ═══════════════════════════════════════════════════════════════════════
+let mFiles=[],mBonds={},mDailyAttr=[],mCumData=null,mTab='daily',mRealPerf=null,cumChart=null;
+
+function addMonthlyFiles(fileArray){
+  Array.from(fileArray).forEach(f=>{
+    const date=extractDate(f.name);if(!date){return}
+    if(mFiles.find(x=>x.date===date))return;
+    mFiles.push({file:f,date,name:f.name});});
+  mFiles.sort((a,b)=>a.date.localeCompare(b.date));
+  renderFileList();loadAllMonthlyFiles();}
+
+function removeFile(date){mFiles=mFiles.filter(f=>f.date!==date);delete mBonds[date];renderFileList();computeMonthly();}
+
+function renderFileList(){
+  const el=document.getElementById('fileList');const zone=document.getElementById('multiDrop');
+  if(mFiles.length===0){el.innerHTML='';zone.classList.remove('loaded');document.getElementById('multiName').textContent='Glisser tous les fichiers quotidiens ici';return}
+  zone.classList.add('loaded');document.getElementById('multiName').textContent=mFiles.length+' fichiers chargés';
+  el.innerHTML=mFiles.map(f=>`<div class="file-chip"><span>${f.date}</span><span class="remove" data-date="${f.date}">×</span></div>`).join('');
+  el.querySelectorAll('.remove').forEach(x=>x.addEventListener('click',()=>removeFile(x.dataset.date)));}
+
+function loadAllMonthlyFiles(){
+  let loaded=0;const total=mFiles.length;
+  mFiles.forEach(mf=>{if(mBonds[mf.date]){loaded++;if(loaded>=total)computeMonthly();return}
+    const r=new FileReader();r.onload=e=>{try{mBonds[mf.date]=parseIndexFile(new Uint8Array(e.target.result),mf.name);document.getElementById('errorM').classList.add('hidden')}catch(err){document.getElementById('errorM').textContent='⚠ '+mf.name+': '+err.message;document.getElementById('errorM').classList.remove('hidden')}
+    loaded++;if(loaded>=total)computeMonthly()};r.readAsArrayBuffer(mf.file)});}
+
+function computeMonthly(){
+  const dates=mFiles.map(f=>f.date).filter(d=>mBonds[d]).sort();
+  if(dates.length<2){document.getElementById('monthlyResults').classList.add('hidden');document.getElementById('mEmpty').classList.remove('hidden');return}
+
+  mDailyAttr=[];
+  for(let i=1;i<dates.length;i++){
+    const attr=computeAttr(mBonds[dates[i-1]],mBonds[dates[i]]);const t=sumResults(attr.results);
+    mDailyAttr.push({date:dates[i],from:dates[i-1],results:attr.results,entering:attr.entering,leaving:attr.leaving,...t});}
+
+  // Cumulate bond-level contributions over the month
+  const bondCum={};
+  mDailyAttr.forEach(day=>{day.results.forEach(r=>{
+    if(!bondCum[r.maceId])bondCum[r.maceId]={maceId:r.maceId,issue:r.issue,isin:r.isin,sector:r.sector,region:r.region,bondCcy:r.bondCcy,coupon:r.coupon,maturity:r.maturity,weight:0,nDays:0,
+      cbPnl:0,eqRetPct:0,wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdResidual:0};
+    const c=bondCum[r.maceId];c.weight+=r.weight;c.nDays++;c.cbPnl+=r.cbPnl;c.eqRetPct+=r.eqRetPct;
+    c.wtdTotal+=r.wtdTotal;c.wtdEquity+=r.wtdEquity;c.wtdGamma+=r.wtdGamma;c.wtdCredit+=r.wtdCredit;c.wtdVega+=r.wtdVega;c.wtdResidual+=r.wtdResidual})});
+  // Average weight
+  Object.values(bondCum).forEach(c=>{c.weight=c.weight/c.nDays});
+  mCumData={bonds:Object.values(bondCum),dates,daily:mDailyAttr};
+  renderMonthly();}
+
+function renderMonthly(){
+  if(!mCumData)return;
+  document.getElementById('mEmpty').classList.add('hidden');document.getElementById('monthlyResults').classList.remove('hidden');
+
+  const bonds=mCumData.bonds;const daily=mCumData.daily;
+  const t={wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdResidual:0};
+  daily.forEach(d=>{t.wtdTotal+=d.wtdTotal;t.wtdEquity+=d.wtdEquity;t.wtdGamma+=d.wtdGamma;t.wtdCredit+=d.wtdCredit;t.wtdVega+=d.wtdVega;t.wtdResidual+=d.wtdResidual});
+  const nBonds=bonds.length;const hasR=mRealPerf!==null;const gap=hasR?mRealPerf-t.wtdTotal:null;
+
+  const cd=[{label:hasR?'Perf Réelle':'Total Théo',value:hasR?mRealPerf:t.wtdTotal,sub:daily.length+' jours, '+nBonds+' obligations'},
+    {label:'Equity',value:t.wtdEquity},{label:'Gamma',value:t.wtdGamma},{label:'Crédit',value:t.wtdCredit},
+    {label:'Vega',value:t.wtdVega},{label:'Résiduel',value:t.wtdResidual,sub:'Theta+FX+Autre'}];
+  if(hasR)cd.push({label:'Écart',value:gap,sub:'Rebal/Coupons/Timing'});
+  renderCards('mCardsRow',cd);renderRecon('mReconBox','mReconContent',t,mRealPerf);
+
+  document.getElementById('mStatsBar').innerHTML=`<span>Période: <strong style="color:#e2e8f0">${mCumData.dates[0]} → ${mCumData.dates[mCumData.dates.length-1]}</strong></span><span>${daily.length} jours</span><span>${nBonds} obligations</span>${hasR?'<span>Écart: <strong style="color:#f59e0b">'+fP(gap)+' bps</strong></span>':''}`;
+
+  renderWF('mWfTheo',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Résiduel',v:t.wtdResidual},{label:'TOTAL',v:t.wtdTotal,isTotal:true}]);
+  const rh=document.getElementById('mWfRealHalf');if(hasR){rh.classList.remove('hidden');renderWF('mWfRecon',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Rés.',v:t.wtdResidual},{label:'Écart',v:gap,isGap:true},{label:'RÉEL',v:mRealPerf,isTotal:true}]);}else rh.classList.add('hidden');
+
+  // Chart
+  renderCumChart(daily);
+  renderMonthlyTab();}
+
+function renderCumChart(daily){
+  const labels=daily.map(d=>shortDate(d.date));
+  const regionSet=new Set();
+  daily.forEach(d=>{d.results.forEach(r=>{if(r.region&&r.region.trim()&&r.region!=='Unknown')regionSet.add(r.region)})});
+  const regions=[...regionSet].sort();
+  const regionColors={'US':'#3b82f6','Europe':'#22c55e','Asia ex Japan':'#f59e0b','Japan':'#ec4899','Other Markets':'#8b5cf6'};
+  const fallback=['#06b6d4','#a855f7','#f97316','#14b8a6','#e11d48','#84cc16'];
+  let fi=0;
+
+  // Build per-region daily data in bps
+  const datasets=regions.map(reg=>{
+    const data=daily.map(day=>{
+      let sum=0;
+      day.results.forEach(r=>{if(r.region===reg)sum+=r.wtdTotal});
+      return Math.round(sum*10000)/100; // bps with 2 decimals
+    });
+    const color=regionColors[reg]||fallback[fi++%fallback.length];
+    return{label:reg,data:data,backgroundColor:color+'cc',borderColor:color,borderWidth:1,borderRadius:3,borderSkipped:false};
+  });
+
+  // Compute min/max for scale
+  let yMin=0,yMax=0;
+  for(let i=0;i<labels.length;i++){
+    let pos=0,neg=0;
+    datasets.forEach(ds=>{const v=ds.data[i];if(v>=0)pos+=v;else neg+=v});
+    if(pos>yMax)yMax=pos;if(neg<yMin)yMin=neg;
+  }
+  const pad=Math.max(Math.abs(yMax),Math.abs(yMin))*0.15||5;
+
+  if(cumChart){cumChart.destroy();cumChart=null}
+  const canvas=document.getElementById('cumChart');
+  const ctx=canvas.getContext('2d');
+  cumChart=new Chart(ctx,{
+    type:'bar',
+    data:{labels:labels,datasets:datasets},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'top',labels:{color:'#94a3b8',font:{family:'Inter',size:11},usePointStyle:true,pointStyle:'rectRounded',padding:16}},
+        tooltip:{
+          backgroundColor:'#1e293b',borderColor:'#334155',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#cbd5e1',footerColor:'#f59e0b',
+          padding:10,bodyFont:{family:'JetBrains Mono',size:11},
+          callbacks:{
+            label:function(c){return ' '+c.dataset.label+':  '+c.parsed.y.toFixed(2)+' bps'},
+            footer:function(items){let s=0;items.forEach(i=>{s+=i.parsed.y});return'─────────\nTotal:  '+s.toFixed(2)+' bps'}
+          }
+        }
+      },
+      scales:{
+        x:{stacked:true,ticks:{color:'#64748b',font:{family:'JetBrains Mono',size:10},maxRotation:45},grid:{color:'rgba(30,41,59,0.3)',drawBorder:false}},
+        y:{stacked:true,min:Math.floor(yMin-pad),max:Math.ceil(yMax+pad),
+          ticks:{color:'#64748b',font:{family:'JetBrains Mono',size:10},callback:function(v){return v.toFixed(0)+' bps'}},
+          grid:{color:'rgba(30,41,59,0.4)',drawBorder:false},
+          afterFit:function(axis){axis.paddingTop=10;axis.paddingBottom=10}
+        }
+      }
+    }
+  });
+}
+
+function renderMonthlyTab(){
+  if(!mCumData)return;const c=document.getElementById('mTabContent');const daily=mCumData.daily;const bonds=mCumData.bonds;
+  if(mTab==='daily'){
+    const cols=[{header:'Date',val:r=>r.date,left:true,fmt:v=>v},{header:'Total',val:r=>r.wtdTotal,fmt:v=>fP(v),clr:true,bg:true},
+      {header:'Equity',val:r=>r.wtdEquity,fmt:v=>fP(v),clr:true},{header:'Gamma',val:r=>r.wtdGamma,fmt:v=>fP(v),clr:true},
+      {header:'Crédit',val:r=>r.wtdCredit,fmt:v=>fP(v),clr:true},{header:'Vega',val:r=>r.wtdVega,fmt:v=>fP(v),clr:true},
+      {header:'Résiduel',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true},{header:'#Bonds',val:r=>r.nBonds,fmt:v=>String(v)},
+      {header:'↑',val:r=>r.nPos,fmt:v=>String(v)},{header:'↓',val:r=>r.nNeg,fmt:v=>String(v)}];
+    // Add cumulative row at bottom
+    let cumT=0,cumE=0,cumG=0,cumC=0,cumV=0,cumR=0;
+    const dailyWithCum=daily.map(d=>{cumT+=d.wtdTotal;cumE+=d.wtdEquity;cumG+=d.wtdGamma;cumC+=d.wtdCredit;cumV+=d.wtdVega;cumR+=d.wtdResidual;
+      return{...d,cumTotal:cumT}});
+    buildTable(c,cols,dailyWithCum,'md',500);
+  } else if(mTab==='msector')buildTable(c,grpCols,groupBy(bonds,'sector'),'ms',600);
+  else if(mTab==='mregion')buildTable(c,grpCols,groupBy(bonds,'region'),'mr',600);
+  else if(mTab==='missuer')buildTable(c,issuerCols,groupByIssuer(bonds),'mi',600);
+  else if(mTab==='mtop'){
+    const s=[...bonds].sort((a,b)=>b.wtdTotal-a.wtdTotal);
+    const cumBndCols=[...bndCols];cumBndCols[4]={header:'ΣΔcb',val:r=>r.cbPnl,fmt:v=>fS(v,2),clr:true};
+    c.innerHTML='<div class="section-label pos">▲ Top 20 du Mois</div><div id="mt1"></div><div class="section-gap"></div><div class="section-label neg">▼ Bottom 20 du Mois</div><div id="mt2"></div>';
+    buildTable(document.getElementById('mt1'),cumBndCols,s.slice(0,20),'mtp',500);buildTable(document.getElementById('mt2'),cumBndCols,s.slice(-20).reverse(),'mbt',500);
+  } else if(mTab==='mdetail'){const s=[...bonds].sort((a,b)=>b.wtdTotal-a.wtdTotal);buildTable(c,bndCols,s,'mdd',600)}}
+
+// Monthly events
+const multiZone=document.getElementById('multiDrop'),multiInput=document.getElementById('multiInput');
+multiZone.addEventListener('click',()=>multiInput.click());
+multiZone.addEventListener('dragover',e=>{e.preventDefault();multiZone.classList.add('drag-over')});
+multiZone.addEventListener('dragleave',()=>multiZone.classList.remove('drag-over'));
+multiZone.addEventListener('drop',e=>{e.preventDefault();multiZone.classList.remove('drag-over');addMonthlyFiles(e.dataTransfer.files)});
+multiInput.addEventListener('change',e=>{addMonthlyFiles(e.target.files)});
+
+document.getElementById('applyPerfM').addEventListener('click',()=>{const v=parseFloat(document.getElementById('realPerfM').value.replace(',','.'));mRealPerf=isNaN(v)?null:v;const st=document.getElementById('perfStatusM');if(mRealPerf!==null){st.classList.remove('hidden');st.textContent='✓ '+fP(mRealPerf)+' bps'}else st.classList.add('hidden');if(mCumData)renderMonthly()});
+document.getElementById('realPerfM').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('applyPerfM').click()});
+document.querySelectorAll('#mTabs .tab').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('#mTabs .tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');mTab=b.dataset.tab;sortSt={};renderMonthlyTab()})});
+document.getElementById('mExportCSV').addEventListener('click',()=>{if(mCumData)exportCSV(mCumData.bonds)});
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXCEL EXPORT (monthly)
+// ═══════════════════════════════════════════════════════════════════════
+document.getElementById('mExportXL').addEventListener('click',()=>{
+  if(!mCumData)return;const daily=mCumData.daily;const bonds=mCumData.bonds;
+  const wb=XLSX.utils.book_new();
+
+  // Sheet 1: Summary
+  const t={wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdResidual:0};
+  daily.forEach(d=>{t.wtdTotal+=d.wtdTotal;t.wtdEquity+=d.wtdEquity;t.wtdGamma+=d.wtdGamma;t.wtdCredit+=d.wtdCredit;t.wtdVega+=d.wtdVega;t.wtdResidual+=d.wtdResidual});
+  const sumRows=[['PnL Attribution — Récap Mensuel'],[`Période: ${mCumData.dates[0]} → ${mCumData.dates[mCumData.dates.length-1]}`],[],
+    ['Facteur','Contribution (bps)'],['Equity / Delta',t.wtdEquity*100],['Gamma',t.wtdGamma*100],['Crédit / Spread',t.wtdCredit*100],
+    ['Vega / Vol',t.wtdVega*100],['Résiduel (Theta+FX+Autre)',t.wtdResidual*100],['Total Théorique',t.wtdTotal*100]];
+  if(mRealPerf!==null){sumRows.push([],['Performance Réelle',mRealPerf*100],['Écart',(mRealPerf-t.wtdTotal)*100])}
+  const ws1=XLSX.utils.aoa_to_sheet(sumRows);XLSX.utils.book_append_sheet(wb,ws1,'Résumé');
+
+  // Sheet 2: Daily
+  const dRows=[['Date','Total(bps)','Equity(bps)','Gamma(bps)','Crédit(bps)','Vega(bps)','Résiduel(bps)','#Bonds','Positifs','Négatifs']];
+  daily.forEach(d=>dRows.push([d.date,d.wtdTotal*100,d.wtdEquity*100,d.wtdGamma*100,d.wtdCredit*100,d.wtdVega*100,d.wtdResidual*100,d.nBonds,d.nPos,d.nNeg]));
+  const ws2=XLSX.utils.aoa_to_sheet(dRows);XLSX.utils.book_append_sheet(wb,ws2,'Jour par Jour');
+
+  // Sheet 3: Sector
+  const secData=groupBy(bonds,'sector');
+  const sRows=[['Secteur','Poids(%)','#','Total(bps)','Equity(bps)','Gamma(bps)','Crédit(bps)','Vega(bps)','Résiduel(bps)']];
+  secData.forEach(r=>sRows.push([r.name,r.weight,r.count,r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,r.wtdResidual*100]));
+  const ws3=XLSX.utils.aoa_to_sheet(sRows);XLSX.utils.book_append_sheet(wb,ws3,'Par Secteur');
+
+  // Sheet 4: Region
+  const regData=groupBy(bonds,'region');
+  const rRows=[['Région','Poids(%)','#','Total(bps)','Equity(bps)','Gamma(bps)','Crédit(bps)','Vega(bps)','Résiduel(bps)']];
+  regData.forEach(r=>rRows.push([r.name,r.weight,r.count,r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,r.wtdResidual*100]));
+  const ws4=XLSX.utils.aoa_to_sheet(rRows);XLSX.utils.book_append_sheet(wb,ws4,'Par Région');
+
+  // Sheet 5: Issuer
+  const issData=groupByIssuer(bonds);
+  const iRows=[['Émetteur','Secteur','Région','Devise','Poids Moy(%)','#Bonds','Obligations','Total(bps)','Equity(bps)','Gamma(bps)','Crédit(bps)','Vega(bps)','Résiduel(bps)']];
+  issData.forEach(r=>iRows.push([r.name,r.sector,r.region,r.bondCcy,r.weight,r.count,r.bonds.join(', '),r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,r.wtdResidual*100]));
+  const ws5b=XLSX.utils.aoa_to_sheet(iRows);XLSX.utils.book_append_sheet(wb,ws5b,'Par Émetteur');
+
+  // Sheet 6: Bond detail
+  const bSorted=[...bonds].sort((a,b)=>b.wtdTotal-a.wtdTotal);
+  const bRows=[['Issue','ISIN','Secteur','Région','Devise','Poids Moy(%)','ΣΔcb','Wtd Total(bps)','Wtd Equity(bps)','Wtd Gamma(bps)','Wtd Crédit(bps)','Wtd Vega(bps)','Wtd Résiduel(bps)']];
+  bSorted.forEach(r=>bRows.push([bondLabel(r),r.isin,r.sector,r.region,r.bondCcy,r.weight,r.cbPnl,r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,r.wtdResidual*100]));
+  const ws5=XLSX.utils.aoa_to_sheet(bRows);XLSX.utils.book_append_sheet(wb,ws5,'Détail Obligations');
+
+  XLSX.writeFile(wb,'PnL_Attribution_Monthly.xlsx');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// CSV EXPORT
+// ═══════════════════════════════════════════════════════════════════════
+function exportCSV(results){
+  const h=['Issue','ISIN','Sector','Region','Currency','Weight(%)',
+    'Wtd_Total(bps)','Wtd_Equity(bps)','Wtd_Gamma(bps)','Wtd_Credit(bps)','Wtd_Vega(bps)','Wtd_Residual(bps)'];
+  const rows=results.map(r=>[bondLabel(r),r.isin,r.sector,r.region,r.bondCcy,r.weight,r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,r.wtdResidual*100]);
+  const csv=[h.join(';'),...rows.map(r=>r.map(v=>typeof v==='string'&&(v.includes(';')||v.includes('"'))?'"'+v.replace(/"/g,'""')+'"':v).join(';'))].join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='pnl_attribution.csv';a.click();URL.revokeObjectURL(url);}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODE TOGGLE
+// ═══════════════════════════════════════════════════════════════════════
+document.querySelectorAll('.mode-btn').forEach(b=>{b.addEventListener('click',()=>{
+  document.querySelectorAll('.mode-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  currentMode=b.dataset.mode;
+  document.getElementById('dailyMode').classList.toggle('hidden',currentMode!=='daily');
+  document.getElementById('monthlyMode').classList.toggle('hidden',currentMode!=='monthly');
+})});
+</script>
+</body>
+</html>
