@@ -111,6 +111,17 @@
   .empty .icon{font-size:40px;margin-bottom:16px;opacity:0.3}
   .empty .title{font-size:15px;font-weight:600;margin-bottom:6px}
 
+  /* CB Detail tab */
+  .cb-selector-row{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+  .cb-selector-row label{font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:1px}
+  .cb-select{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 12px;font-size:13px;min-width:380px;font-family:inherit;outline:none;cursor:pointer}
+  .cb-select:focus{border-color:#3b82f6}
+  .cb-info-bar{background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;gap:24px;flex-wrap:wrap;font-size:12px}
+  .cb-info-bar .lbl{color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}
+  .cb-info-bar .val{font-weight:700;color:#e2e8f0;font-family:'JetBrains Mono',monospace}
+  .cb-chart-box{background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:18px 20px;margin-bottom:16px}
+  .cb-empty-sel{text-align:center;padding:40px 20px;color:#475569;font-size:13px}
+
   .pos{color:#22c55e}.neg{color:#ef4444}.neu{color:#94a3b8}
   .bg-pos{background:rgba(34,197,94,0.08)}.bg-neg{background:rgba(239,68,68,0.08)}
   .hidden{display:none}
@@ -180,6 +191,7 @@
         <button class="tab" data-tab="mregion">Par Région</button>
         <button class="tab" data-tab="missuer">Par Émetteur</button><button class="tab" data-tab="mtop">Top / Bottom</button>
         <button class="tab" data-tab="mdetail">Détail Obligations</button>
+        <button class="tab" data-tab="cbdetail">Détail par CB</button>
         <div class="tab-spacer"></div>
         <button class="export-btn xl" id="mExportXL">↓ Excel</button>
         <button class="export-btn" id="mExportCSV">↓ CSV</button>
@@ -563,7 +575,135 @@ function renderMonthlyTab(){
     const cumBndCols=[...bndCols];cumBndCols[4]={header:'ΣΔcb',val:r=>r.cbPnl,fmt:v=>fS(v,2),clr:true};
     c.innerHTML='<div class="section-label pos">▲ Top 20 du Mois</div><div id="mt1"></div><div class="section-gap"></div><div class="section-label neg">▼ Bottom 20 du Mois</div><div id="mt2"></div>';
     buildTable(document.getElementById('mt1'),cumBndCols,s.slice(0,20),'mtp',500);buildTable(document.getElementById('mt2'),cumBndCols,s.slice(-20).reverse(),'mbt',500);
-  } else if(mTab==='mdetail'){const s=[...bonds].sort((a,b)=>b.wtdTotal-a.wtdTotal);buildTable(c,bndCols,s,'mdd',600)}}
+  } else if(mTab==='mdetail'){const s=[...bonds].sort((a,b)=>b.wtdTotal-a.wtdTotal);buildTable(c,bndCols,s,'mdd',600)}
+  else if(mTab==='cbdetail')renderCBDetailTab(c);}
+
+// ───────── CB DETAIL TAB ─────────
+let cbSelectedId=null,cbChart=null;
+function renderCBDetailTab(container){
+  const bonds=mCumData.bonds;const daily=mCumData.daily;
+  // Sorted list of bonds by absolute contribution (descending) for the selector
+  const sorted=[...bonds].sort((a,b)=>Math.abs(b.wtdTotal)-Math.abs(a.wtdTotal));
+  if(!cbSelectedId||!bonds.find(b=>b.maceId===cbSelectedId))cbSelectedId=sorted[0]?.maceId||null;
+  const options=sorted.map(b=>{
+    const lab=bondLabel(b);const contrib=(b.wtdTotal*10000).toFixed(2);
+    return`<option value="${b.maceId}" ${b.maceId===cbSelectedId?'selected':''}>${lab} — ${b.isin||'—'}  [${contrib>=0?'+':''}${contrib} bps]</option>`;
+  }).join('');
+  container.innerHTML=`<div class="cb-selector-row"><label>Obligation :</label><select class="cb-select" id="cbSelector">${options}</select><span style="font-size:11px;color:#475569">${sorted.length} obligations — triées par |contribution|</span></div><div id="cbDetailDisplay"></div>`;
+  document.getElementById('cbSelector').addEventListener('change',e=>{cbSelectedId=e.target.value;renderCBDetailDisplay()});
+  renderCBDetailDisplay();
+}
+
+function renderCBDetailDisplay(){
+  const el=document.getElementById('cbDetailDisplay');if(!cbSelectedId){el.innerHTML='<div class="cb-empty-sel">Sélectionnez une obligation</div>';return}
+  const daily=mCumData.daily;const dates=mCumData.dates;
+  const bondCum=mCumData.bonds.find(b=>b.maceId===cbSelectedId);
+  // Daily series from computed attributions
+  const series=daily.map(day=>{const r=day.results.find(x=>x.maceId===cbSelectedId);return{date:day.date,r:r||null}});
+  // Raw EOD values from mBonds (covers also the first date which has no attribution)
+  const rawSeries=dates.map(d=>{const b=mBonds[d]?.find(x=>x.maceId===cbSelectedId);return{date:d,b:b||null}});
+  const firstRaw=rawSeries.find(x=>x.b);
+  // Build info bar
+  const info=firstRaw?.b||{};
+  const totalBps=(bondCum?.wtdTotal||0)*10000;
+  el.innerHTML=`
+    <div class="cb-info-bar">
+      <div><div class="lbl">Issue</div><div class="val">${bondLabel(info)}</div></div>
+      <div><div class="lbl">ISIN</div><div class="val">${info.isin||'—'}</div></div>
+      <div><div class="lbl">Secteur</div><div class="val">${info.sector||'—'}</div></div>
+      <div><div class="lbl">Région</div><div class="val">${info.region||'—'}</div></div>
+      <div><div class="lbl">Devise</div><div class="val">${info.bondCcy||'—'}</div></div>
+      <div><div class="lbl">Poids moy.</div><div class="val">${fmt(bondCum?.weight,2)}%</div></div>
+      <div><div class="lbl">Σ Wtd Total</div><div class="val ${cc(bondCum?.wtdTotal||0)}">${(totalBps>=0?'+':'')+totalBps.toFixed(2)} bps</div></div>
+      <div><div class="lbl">Σ Eq</div><div class="val ${cc(bondCum?.wtdEquity||0)}">${fP(bondCum?.wtdEquity||0)} bps</div></div>
+      <div><div class="lbl">Σ Crédit</div><div class="val ${cc(bondCum?.wtdCredit||0)}">${fP(bondCum?.wtdCredit||0)} bps</div></div>
+      <div><div class="lbl">Σ Vega</div><div class="val ${cc(bondCum?.wtdVega||0)}">${fP(bondCum?.wtdVega||0)} bps</div></div>
+    </div>
+    <div class="cb-chart-box"><div class="chart-title">Évolution CB / Action (base 100) & Spread crédit</div><div style="position:relative;height:280px;width:100%"><canvas id="cbDetailChart"></canvas></div></div>
+    <div id="cbDailyTable"></div>`;
+
+  renderCBChart(rawSeries);
+  renderCBDailyTable(series,rawSeries);
+}
+
+function renderCBChart(rawSeries){
+  const pts=rawSeries.filter(x=>x.b);if(pts.length<2)return;
+  const labels=rawSeries.map(x=>shortDate(x.date));
+  const cb0=pts.find(x=>x.b.cbPrice)?.b.cbPrice;
+  const eq0=pts.find(x=>x.b.eqPrice)?.b.eqPrice;
+  const cbData=rawSeries.map(x=>x.b?.cbPrice&&cb0?(x.b.cbPrice/cb0)*100:null);
+  const eqData=rawSeries.map(x=>x.b?.eqPrice&&eq0?(x.b.eqPrice/eq0)*100:null);
+  const spData=rawSeries.map(x=>x.b?.creditSpread??null);
+  if(cbChart){cbChart.destroy();cbChart=null}
+  const ctx=document.getElementById('cbDetailChart').getContext('2d');
+  cbChart=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'CB (base 100)',data:cbData,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',borderWidth:2,tension:0.25,pointRadius:3,yAxisID:'y',spanGaps:true},
+      {label:'Action (base 100)',data:eqData,borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,0.1)',borderWidth:2,tension:0.25,pointRadius:3,yAxisID:'y',spanGaps:true},
+      {label:'Spread crédit (bps)',data:spData,borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,0.05)',borderWidth:2,tension:0.25,pointRadius:3,borderDash:[4,3],yAxisID:'y1',spanGaps:true}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'top',labels:{color:'#94a3b8',font:{family:'Inter',size:11},usePointStyle:true,padding:16}},
+        tooltip:{backgroundColor:'#1e293b',borderColor:'#334155',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#cbd5e1',padding:10,bodyFont:{family:'JetBrains Mono',size:11},
+          callbacks:{label:c=>' '+c.dataset.label+': '+(c.parsed.y==null?'—':c.parsed.y.toFixed(2))}}
+      },
+      scales:{
+        x:{ticks:{color:'#64748b',font:{family:'JetBrains Mono',size:10},maxRotation:45},grid:{color:'rgba(30,41,59,0.3)'}},
+        y:{position:'left',ticks:{color:'#94a3b8',font:{family:'JetBrains Mono',size:10},callback:v=>v.toFixed(1)},grid:{color:'rgba(30,41,59,0.4)'},title:{display:true,text:'Prix (base 100)',color:'#64748b',font:{size:10}}},
+        y1:{position:'right',ticks:{color:'#f59e0b',font:{family:'JetBrains Mono',size:10},callback:v=>v.toFixed(0)},grid:{display:false},title:{display:true,text:'Spread (bps)',color:'#f59e0b',font:{size:10}}}
+      }
+    }
+  });
+}
+
+function renderCBDailyTable(series,rawSeries){
+  // Join: each row = day with t0->t1 attribution + raw values
+  const rows=series.map((s,i)=>{
+    const r=s.r;const prev=rawSeries[i]?.b;const curr=rawSeries[i+1]?.b;
+    return{
+      date:s.date,
+      cbT0:prev?.cbPrice,cbT1:curr?.cbPrice,
+      eqT0:prev?.eqPrice,eqT1:curr?.eqPrice,
+      spT0:prev?.creditSpread,spT1:curr?.creditSpread,
+      cbPnl:r?.cbPnl,eqRetPct:r?.eqRetPct,
+      dSpread:r?.spreadChange,dVol:r?.volChange,
+      weight:r?.weight,
+      wtdTotal:r?.wtdTotal,wtdEquity:r?.wtdEquity,wtdGamma:r?.wtdGamma,wtdCredit:r?.wtdCredit,wtdVega:r?.wtdVega,wtdResidual:r?.wtdResidual,
+      missing:!r
+    };
+  });
+  const dash=v=>(v==null||isNaN(v))?'—':v;
+  const cols=[
+    {header:'Date',val:r=>r.date,left:true,fmt:v=>v},
+    {header:'CB t-1',val:r=>r.cbT0,fmt:v=>dash(v)===v?(v?v.toFixed(2):'—'):'—'},
+    {header:'CB t',val:r=>r.cbT1,fmt:v=>v?v.toFixed(2):'—'},
+    {header:'ΔCB',val:r=>r.cbPnl,fmt:v=>v==null?'—':fS(v,2),clr:true},
+    {header:'ΔCB%',val:r=>(r.cbPnl!=null&&r.cbT0)?(r.cbPnl/r.cbT0)*100:null,fmt:v=>v==null?'—':p2(v),clr:true},
+    {header:'Eq t-1',val:r=>r.eqT0,fmt:v=>v?v.toFixed(2):'—'},
+    {header:'Eq t',val:r=>r.eqT1,fmt:v=>v?v.toFixed(2):'—'},
+    {header:'ΔEq%',val:r=>r.eqRetPct,fmt:v=>v==null?'—':p2(v),clr:true},
+    {header:'Spd t-1',val:r=>r.spT0,fmt:v=>v==null?'—':v.toFixed(0)},
+    {header:'Spd t',val:r=>r.spT1,fmt:v=>v==null?'—':v.toFixed(0)},
+    {header:'ΔSpd(bp)',val:r=>r.dSpread,fmt:v=>v==null?'—':fS(v,1),clr:true},
+    {header:'Poids%',val:r=>r.weight,fmt:v=>v==null?'—':fmt(v,2)},
+    {header:'Wtd Tot',val:r=>r.wtdTotal,fmt:v=>v==null?'—':fP(v),clr:true,bg:true},
+    {header:'Wtd Eq',val:r=>r.wtdEquity,fmt:v=>v==null?'—':fP(v),clr:true},
+    {header:'Wtd Γ',val:r=>r.wtdGamma,fmt:v=>v==null?'—':fP(v),clr:true},
+    {header:'Wtd Cr',val:r=>r.wtdCredit,fmt:v=>v==null?'—':fP(v),clr:true},
+    {header:'Wtd V',val:r=>r.wtdVega,fmt:v=>v==null?'—':fP(v),clr:true},
+    {header:'Wtd Res',val:r=>r.wtdResidual,fmt:v=>v==null?'—':fP(v),clr:true}
+  ];
+  // Append cumulative row
+  const sum=k=>rows.reduce((a,r)=>a+(r[k]||0),0);
+  const firstCbT0=rows.find(r=>r.cbT0)?.cbT0||null;
+  const totalRow={date:'Σ Cumulé',cbT0:firstCbT0,cbT1:null,eqT0:null,eqT1:null,spT0:null,spT1:null,
+    cbPnl:sum('cbPnl'),eqRetPct:null,dSpread:sum('dSpread'),weight:null,
+    wtdTotal:sum('wtdTotal'),wtdEquity:sum('wtdEquity'),wtdGamma:sum('wtdGamma'),wtdCredit:sum('wtdCredit'),wtdVega:sum('wtdVega'),wtdResidual:sum('wtdResidual'),isTotal:true};
+  buildTable(document.getElementById('cbDailyTable'),cols,[...rows,totalRow],'cbd',520);
+}
 
 // Monthly events
 const multiZone=document.getElementById('multiDrop'),multiInput=document.getElementById('multiInput');
