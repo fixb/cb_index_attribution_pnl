@@ -111,6 +111,11 @@
   .empty .icon{font-size:40px;margin-bottom:16px;opacity:0.3}
   .empty .title{font-size:15px;font-weight:600;margin-bottom:6px}
 
+  /* Pricer link */
+  .pricer-link{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:5px;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.35);color:#60a5fa;text-decoration:none;font-size:0.85rem;font-weight:700;transition:all 0.15s;line-height:1}
+  .pricer-link:hover{background:rgba(96,165,250,0.32);color:#fff;transform:translateY(-1px)}
+  .pricer-link.lg{width:auto;height:28px;padding:0 12px;gap:6px;font-size:11px;letter-spacing:0.5px}
+
   /* CB Detail tab */
   .cb-selector-row{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
   .cb-selector-row label{font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:1px}
@@ -288,6 +293,32 @@ const cc=v=>v>0.0005?'pos':v<-0.0005?'neg':'neu';
 const bc=v=>v>0.0005?'bg-pos':v<-0.0005?'bg-neg':'';
 const ch=v=>v>0.0005?'#22c55e':v<-0.0005?'#ef4444':'#94a3b8';
 
+// ───────── cb_pricer integration ─────────
+const CB_PRICER_URL='../cb_pricer/index.html';
+function latestBondFor(maceId){
+  if(typeof mCumData!=='undefined'&&mCumData&&mCumData.dates&&mCumData.dates.length){
+    const last=mCumData.dates[mCumData.dates.length-1];const b=mBonds[last]?.find(x=>x.maceId===maceId);if(b)return b;
+  }
+  if(typeof bondsT1!=='undefined'&&bondsT1){const b=bondsT1.find(x=>x.maceId===maceId);if(b)return b;}
+  return null;
+}
+function cbPricerURL(r){
+  const latest=latestBondFor(r.maceId);
+  const get=k=>(latest&&latest[k]!=null&&!isNaN(latest[k]))?latest[k]:(r[k]!=null&&!isNaN(r[k])?r[k]:null);
+  const cb=get('cbPrice'),eq=get('eqPrice'),par=get('parity'),iv=get('impliedVol'),sp=get('creditSpread');
+  const p=new URLSearchParams();
+  const add=(k,v)=>{if(v==null||v==='')return;const n=+v;if(isNaN(n))return;p.set(k,n);};
+  const name=bondLabel(r);if(name)p.set('name',name);
+  add('coupon',r.coupon);
+  if(r.maturity)p.set('T_date',String(r.maturity).slice(0,10));
+  add('S',eq);
+  if(eq!=null&&par!=null&&par>0)p.set('K',(eq*100/par).toFixed(4));
+  add('iv',iv);add('spread',sp);
+  add('ftse_cb',cb);add('ftse_parity',par);
+  return CB_PRICER_URL+'?'+p.toString();
+}
+function pricerCell(r){return`<a class="pricer-link" target="_blank" rel="noopener" href="${cbPricerURL(r)}" title="Ouvrir dans cb_pricer">↗</a>`;}
+
 function extractDate(name){const m=name.match(/(\d{8})/);if(!m)return null;const s=m[1];return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);}
 function shortDate(d){return d.slice(5);}
 function bondLabel(r){
@@ -357,7 +388,8 @@ const bndCols=[
   {header:'Wtd Γ',val:r=>r.wtdGamma,fmt:v=>fP(v),clr:true},
   {header:'Wtd Cr',val:r=>r.wtdCredit,fmt:v=>fP(v),clr:true},
   {header:'Wtd V',val:r=>r.wtdVega,fmt:v=>fP(v),clr:true},
-  {header:'Wtd Res',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true}];
+  {header:'Wtd Res',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true},
+  {header:'↗',val:r=>'',fmt:(v,row)=>pricerCell(row)}];
 
 const issuerCols=[
   {header:'Émetteur',val:r=>r.name,left:true,fmt:v=>(v||'').substring(0,24)},
@@ -606,6 +638,7 @@ function renderCBDetailDisplay(){
   // Build info bar
   const info=firstRaw?.b||{};
   const totalBps=(bondCum?.wtdTotal||0)*10000;
+  const pricerHref=cbPricerURL(bondCum||info);
   el.innerHTML=`
     <div class="cb-info-bar">
       <div><div class="lbl">Issue</div><div class="val">${bondLabel(info)}</div></div>
@@ -618,6 +651,7 @@ function renderCBDetailDisplay(){
       <div><div class="lbl">Σ Eq</div><div class="val ${cc(bondCum?.wtdEquity||0)}">${fP(bondCum?.wtdEquity||0)} bps</div></div>
       <div><div class="lbl">Σ Crédit</div><div class="val ${cc(bondCum?.wtdCredit||0)}">${fP(bondCum?.wtdCredit||0)} bps</div></div>
       <div><div class="lbl">Σ Vega</div><div class="val ${cc(bondCum?.wtdVega||0)}">${fP(bondCum?.wtdVega||0)} bps</div></div>
+      <div style="margin-left:auto;align-self:center"><a class="pricer-link lg" target="_blank" rel="noopener" href="${pricerHref}" title="Ouvrir cette CB dans cb_pricer">↗ cb_pricer</a></div>
     </div>
     <div class="cb-chart-box"><div class="chart-title">Évolution CB / Action (base 100) & Spread crédit</div><div style="position:relative;height:280px;width:100%"><canvas id="cbDetailChart"></canvas></div></div>
     <div id="cbDailyTable"></div>`;
