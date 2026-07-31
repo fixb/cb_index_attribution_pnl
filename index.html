@@ -127,6 +127,22 @@
   .cb-chart-box{background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:18px 20px;margin-bottom:16px}
   .cb-empty-sel{text-align:center;padding:40px 20px;color:#475569;font-size:13px}
 
+  /* Region filter + search bar */
+  .region-filter{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;padding:10px 14px;background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px}
+  .rf-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .region-filter .rf-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#64748b;font-weight:600;margin-right:2px}
+  .rf-chip{background:#0f172a;border:1px solid #334155;color:#94a3b8;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+  .rf-chip:hover{border-color:#3b82f6;color:#e2e8f0}
+  .rf-chip.active{background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-color:transparent;color:#fff}
+  .rf-count{font-size:11px;color:#64748b;margin-left:auto;font-family:'JetBrains Mono',monospace}
+  .rf-search{position:relative;display:flex;align-items:center;max-width:520px;width:100%}
+  .rf-search input{width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 30px 8px 30px;font-size:13px;font-family:inherit;outline:none}
+  .rf-search input:focus{border-color:#3b82f6}
+  .rf-search input::placeholder{color:#475569}
+  .rf-search-ico{position:absolute;left:10px;color:#64748b;font-size:14px;pointer-events:none}
+  .rf-clear{position:absolute;right:9px;cursor:pointer;color:#94a3b8;font-weight:700;font-size:16px;line-height:1}
+  .rf-clear:hover{color:#ef4444}
+
   .pos{color:#22c55e}.neg{color:#ef4444}.neu{color:#94a3b8}
   .bg-pos{background:rgba(34,197,94,0.08)}.bg-neg{background:rgba(239,68,68,0.08)}
   .hidden{display:none}
@@ -204,6 +220,7 @@
         <button class="export-btn xl" id="mExportXL">↓ Excel</button>
         <button class="export-btn" id="mExportCSV">↓ CSV</button>
       </div>
+      <div id="mRegionFilterBar" class="region-filter hidden"></div>
       <div id="mTabContent"></div>
     </div>
     <div id="mEmpty" class="empty"><div class="icon">📊</div><div class="title">Chargez les fichiers quotidiens du mois</div><div>Minimum 2 fichiers pour commencer le calcul</div></div>
@@ -523,6 +540,60 @@ document.getElementById('dExportCSV').addEventListener('click',()=>{if(dData)exp
 // MONTHLY MODE
 // ═══════════════════════════════════════════════════════════════════════
 let mFiles=[],mParsed={},mBonds={},mDailyAttr=[],mCumData=null,mTab='daily',mRealPerf=null,cumChart=null;
+// Filtre régions (multi-sélection) appliqué aux onglets Par Émetteur / Top-Bottom / Détail Obligations / Détail par CB.
+// Set vide = toutes les régions.
+let mRegionSel=new Set();
+let mSearchQuery=''; // recherche libre (émetteur / CB / ISIN)
+const RF_TABS=['missuer','mtop','mdetail','cbdetail'];
+function mRegionList(){const s=new Set();(mCumData?.bonds||[]).forEach(b=>{const r=(b.region||'').trim();if(r)s.add(r)});return[...s].sort()}
+function applyRegionFilter(bonds){if(!mRegionSel.size)return bonds;return bonds.filter(b=>mRegionSel.has((b.region||'').trim()))}
+function applySearchFilter(bonds){
+  const q=mSearchQuery.trim().toLowerCase();if(!q)return bonds;
+  return bonds.filter(b=>bondLabel(b).toLowerCase().includes(q)||(b.isin||'').toLowerCase().includes(q)||(b.issue||'').toLowerCase().includes(q)||String(b.maceId||'').includes(q));
+}
+function applyFilters(bonds){return applySearchFilter(applyRegionFilter(bonds))}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function renderRegionFilterBar(){
+  const bar=document.getElementById('mRegionFilterBar');
+  if(!RF_TABS.includes(mTab)){bar.classList.add('hidden');return}
+  bar.classList.remove('hidden');
+  // Squelette créé une seule fois → l'input de recherche n'est jamais reconstruit (garde le focus/curseur pendant la saisie).
+  if(!document.getElementById('mSearchInput')){
+    bar.innerHTML=
+      '<div id="mRfChips" class="rf-chips"></div>'+
+      '<div class="rf-search">'+
+        '<span class="rf-search-ico">⌕</span>'+
+        '<input type="text" id="mSearchInput" list="mSearchList" placeholder="Rechercher un émetteur, une CB ou un ISIN…" autocomplete="off">'+
+        '<span class="rf-clear hidden" id="mSearchClear" title="Effacer">×</span>'+
+        '<datalist id="mSearchList"></datalist>'+
+      '</div>';
+    const inp=document.getElementById('mSearchInput');inp.value=mSearchQuery;
+    const clr=document.getElementById('mSearchClear');
+    inp.addEventListener('input',()=>{mSearchQuery=inp.value;clr.classList.toggle('hidden',!mSearchQuery);sortSt={};renderMonthlyTab()});
+    clr.addEventListener('click',()=>{mSearchQuery='';inp.value='';clr.classList.add('hidden');sortSt={};inp.focus();renderMonthlyTab()});
+  }
+  // Chips régions (reconstruits à chaque rendu)
+  const chips=document.getElementById('mRfChips');
+  const regions=mRegionList();const allActive=mRegionSel.size===0;
+  const nShown=applyFilters(mCumData?.bonds||[]).length;const filtered=!allActive||!!mSearchQuery.trim();
+  chips.innerHTML='<span class="rf-label">Régions :</span>'+
+    `<button class="rf-chip ${allActive?'active':''}" data-region="__all">Toutes</button>`+
+    regions.map(r=>`<button class="rf-chip ${mRegionSel.has(r)?'active':''}" data-region="${r}">${r}</button>`).join('')+
+    `<span class="rf-count">${nShown} obligation${nShown>1?'s':''}${filtered?' affichées':''}</span>`;
+  chips.querySelectorAll('.rf-chip').forEach(ch=>ch.addEventListener('click',()=>{
+    const reg=ch.dataset.region;
+    if(reg==='__all')mRegionSel.clear();
+    else{if(mRegionSel.has(reg))mRegionSel.delete(reg);else mRegionSel.add(reg)}
+    sortSt={};renderMonthlyTab();
+  }));
+  // Suggestions d'autocomplétion (libellés CB + ISIN), limitées aux régions sélectionnées
+  const dl=document.getElementById('mSearchList');const seen=new Set();const opts=[];
+  applyRegionFilter(mCumData?.bonds||[]).forEach(b=>{
+    const lab=bondLabel(b);if(lab&&!seen.has(lab)){seen.add(lab);opts.push(lab)}
+    const is=(b.isin||'').trim();if(is&&!seen.has(is)){seen.add(is);opts.push(is)}
+  });
+  dl.innerHTML=opts.map(o=>`<option value="${esc(o)}"></option>`).join('');
+}
 
 function addMonthlyFiles(fileArray){
   Array.from(fileArray).forEach(f=>{
@@ -689,7 +760,9 @@ function renderCumChart(daily){
 }
 
 function renderMonthlyTab(){
-  if(!mCumData)return;const c=document.getElementById('mTabContent');const daily=mCumData.daily;const bonds=mCumData.bonds;
+  if(!mCumData)return;const c=document.getElementById('mTabContent');const daily=mCumData.daily;const allBonds=mCumData.bonds;
+  renderRegionFilterBar();
+  const bonds=applyFilters(allBonds); // régions + recherche, pour les onglets RF_TABS ; msector/mregion utilisent allBonds
   if(mTab==='daily'){
     const cols=[{header:'Date',val:r=>r.date,left:true,fmt:v=>v},{header:'Total',val:r=>r.wtdTotal,fmt:v=>fP(v),clr:true,bg:true},
       {header:'Equity',val:r=>r.wtdEquity,fmt:v=>fP(v),clr:true},{header:'Gamma',val:r=>r.wtdGamma,fmt:v=>fP(v),clr:true},
@@ -703,8 +776,8 @@ function renderMonthlyTab(){
     const dailyWithCum=daily.map(d=>{cumT+=d.wtdTotal;cumE+=d.wtdEquity;cumG+=d.wtdGamma;cumC+=d.wtdCredit;cumV+=d.wtdVega;cumR+=d.wtdResidual;
       return{...d,cumTotal:cumT}});
     buildTable(c,cols,dailyWithCum,'md',500);
-  } else if(mTab==='msector')buildTable(c,grpCols,groupBy(bonds,'sector'),'ms',600);
-  else if(mTab==='mregion')buildTable(c,grpCols,groupBy(bonds,'region'),'mr',600);
+  } else if(mTab==='msector')buildTable(c,grpCols,groupBy(allBonds,'sector'),'ms',600);
+  else if(mTab==='mregion')buildTable(c,grpCols,groupBy(allBonds,'region'),'mr',600);
   else if(mTab==='missuer')buildTable(c,issuerCols,groupByIssuer(bonds),'mi',600);
   else if(mTab==='mtop'){
     const s=[...bonds].sort((a,b)=>b.wtdTotal-a.wtdTotal);
@@ -717,7 +790,7 @@ function renderMonthlyTab(){
 // ───────── CB DETAIL TAB ─────────
 let cbSelectedId=null,cbChart=null;
 function renderCBDetailTab(container){
-  const bonds=mCumData.bonds;const daily=mCumData.daily;
+  const bonds=applyFilters(mCumData.bonds);const daily=mCumData.daily;
   // Sorted list of bonds by absolute contribution (descending) for the selector
   const sorted=[...bonds].sort((a,b)=>Math.abs(b.wtdTotal)-Math.abs(a.wtdTotal));
   if(!cbSelectedId||!bonds.find(b=>b.maceId===cbSelectedId))cbSelectedId=sorted[0]?.maceId||null;
