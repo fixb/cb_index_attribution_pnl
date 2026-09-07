@@ -73,9 +73,9 @@
 
   .error-box{background:rgba(239,68,68,0.1);border:1px solid #7f1d1d;border-radius:8px;padding:12px 16px;margin-bottom:20px;color:#fca5a5;font-size:13px}
   .cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
-  .card{background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:16px 18px;flex:1 1 150px;min-width:130px}
+  .card{background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:14px 14px;flex:1 1 110px;min-width:108px}
   .card .card-label{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;margin-bottom:6px}
-  .card .card-value{font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace}
+  .card .card-value{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;white-space:nowrap}
   .card .card-sub{font-size:11px;color:#475569;margin-top:4px}
 
   .recon-box{background:rgba(15,23,42,0.5);border:1px solid #1e293b;border-radius:10px;padding:20px 24px;margin-bottom:24px}
@@ -201,12 +201,13 @@
     </details>
     <div id="errorD" class="error-box hidden"></div>
     <div id="dailyResults" class="hidden">
+      <div id="dDateWarn" class="error-box hidden" style="border-color:#92400e;background:rgba(245,158,11,0.08);color:#fcd34d"></div>
       <div id="dRebalWarn" class="error-box hidden" style="border-color:#92400e;background:rgba(245,158,11,0.08);color:#fcd34d"></div>
       <div class="cards" id="dCardsRow"></div>
       <div class="recon-box hidden" id="dReconBox"><div class="recon-title">Réconciliation — Théorique vs Réelle</div><div id="dReconContent"></div></div>
       <div class="stats-bar" id="dStatsBar"></div>
       <div class="wf-row"><div class="wf-half"><div class="waterfall-box"><div class="waterfall-title">Attribution Théorique (bps)</div><div class="waterfall" id="dWfTheo"></div></div></div><div class="wf-half hidden" id="dWfRealHalf"><div class="waterfall-box"><div class="waterfall-title">Réconciliation</div><div class="waterfall" id="dWfRecon"></div></div></div></div>
-      <div class="tabs" id="dTabs"><button class="tab active" data-tab="sector">Par Secteur</button><button class="tab" data-tab="region">Par Région</button><button class="tab" data-tab="issuer">Par Émetteur</button><button class="tab" data-tab="top">Top / Bottom</button><button class="tab" data-tab="detail">Détail</button><div class="tab-spacer"></div><button class="export-btn" id="dExportCSV">↓ CSV</button></div>
+      <div class="tabs" id="dTabs"><button class="tab active" data-tab="sector">Par Secteur</button><button class="tab" data-tab="region">Par Région</button><button class="tab" data-tab="issuer">Par Émetteur</button><button class="tab" data-tab="top">Top / Bottom</button><button class="tab" data-tab="detail">Détail</button><div class="tab-spacer"></div><button class="export-btn xl" id="dExportXL">↓ Excel</button><button class="export-btn" id="dExportCSV">↓ CSV</button></div>
       <div id="dTabContent"></div>
     </div>
     <div id="dEmpty" class="empty"><div class="icon">📅</div><div class="title">Chargez deux fichiers UCBINDEX (T₀ et T₁)</div><div>Formats : .xls, .xlsx</div></div>
@@ -264,23 +265,27 @@
     <summary>Méthodologie de calcul</summary>
     <div class="content">
       Toutes les contributions sont exprimées en <strong>rendement</strong> (% du prix CB t₀), pondérées par le poids t₀ — et non en points de prix.<br>
-      <strong>Rendement CB (devise index)</strong> = (1 + ΔCB/CB₀) × (1 + FX) − 1<br>
-      <strong>Equity/Delta</strong> = (Delta/100) × Parity(t0) × (ΔEq/Eq) / CB₀<br>
-      <strong>Gamma</strong> = ½ × Gamma × (Eq return %)² / CB₀<br>
+      <strong>Rendement CB (devise index)</strong> = (1 + (ΔCB + Carry)/CB₀) × (1 + FX) − 1<br>
+      <strong>Equity/Delta</strong> = (Delta/100) × Parity(t0) × (ΔParité/Parité) / CB₀ — la parité capte le mouvement de l'action, du ratio de conversion et du change action/obligation ; repli sur ΔEq/Eq si la parité manque<br>
+      <strong>Gamma</strong> = ½ × Gamma × Parity(t0) × (ΔParité/Parité)² / CB₀, avec Gamma = variation du delta (points) pour +1 % de parité<br>
       <strong>Crédit/Spread</strong> = Rho(10bp) × (ΔSpread / 10) / CB₀<br>
       <strong>Vega/Vol</strong> = Vega × ΔImplied Vol / CB₀<br>
       <strong>Taux</strong> = −Duration × Δr (défaut) ou Rho(10bp) × (Δr / 10) / CB₀, avec Δr = variation du taux sans risque de la devise de l'obligation (bp) saisie par l'utilisateur ou déduite du tableau de niveaux ; sans donnée taux, la contribution est nulle et reste dans le résiduel<br>
+      <strong>Carry</strong> = Coupon × jours calendaires / 365 / CB₀ (coupon couru, ACT/365 ; les dates sont lues dans les noms de fichiers AAAAMMJJ)<br>
       <strong>FX</strong> = variation de change devise → devise index, déduite par devise de la médiane des ratios (ΔMarket Cap USD / ΔPrix) des titres communs<br>
-      <strong>Résiduel</strong> = Rendement CB − (Equity + Gamma + Crédit + Vega + Taux + FX)<br>
+      <strong>Résiduel</strong> = Rendement CB − (Equity + Gamma + Crédit + Vega + Taux + Carry + FX) : theta de l'option, convexité crédit/taux, termes croisés, ajustements de ratio<br>
       <strong>Pondération</strong> = Poids(t0) / 100 × contribution<br>
       <strong>Sortants (rebalancement)</strong> = rebalancement mensuel effectif le 2ᵉ mercredi au soir ; les titres présents en t₀ mais absents en t₁ sont pricés via le fichier annexe (index broad) s'il est chargé ; sinon leur poids non couvert est signalé<br>
       <strong>Cumulé mensuel</strong> = chaînage géométrique Π(1+r&#11388;)−1, contributions quotidiennes ajustées par lissage de Carino (k&#11388; = [ln(1+r&#11388;)/r&#11388;] / [ln(1+R)/R]) pour qu'elles somment au total composé<br>
-      <strong>Écart</strong> = Perf réelle − Total théorique composé
+      <strong>Écart</strong> = Perf réelle − Total théorique composé : rebalancement, coupons détachés, décalage des snapshots
     </div>
   </details>
 </div>
 
 <script>
+// Garde-fou : sans SheetJS / Chart.js (CDN inaccessible) l'outil ne peut rien faire → message explicite
+(function(){const miss=[typeof XLSX==='undefined'?'SheetJS (xlsx)':null,typeof Chart==='undefined'?'Chart.js':null].filter(Boolean);
+  if(miss.length)['errorD','errorM'].forEach(id=>{const el=document.getElementById(id);el.textContent='⚠ Bibliothèque non chargée : '+miss.join(', ')+' — vérifiez l\'accès à cdnjs.cloudflare.com puis rechargez la page.';el.classList.remove('hidden')})})();
 // ═══════════════════════════════════════════════════════════════════════
 // CORE ENGINE (shared)
 // ═══════════════════════════════════════════════════════════════════════
@@ -301,7 +306,7 @@ function parseIndexFile(buffer,fileName){
       parity:num('Parity'),delta:num('Delta'),gamma:num('Gamma'),rho:num('Rho (10bp)'),vega:num('Vega'),
       creditSpread:num('Credit Spread'),impliedVol:num('Implied Vol.'),weight:num('Index Weight'),mcapUsd:num('Market Cap (USDm)'),
       sector:String(get(row,'Sector')??''),region:String(get(row,'Region')??''),country:String(get(row,'Country')??''),
-      duration:num('Duration'),chi:num('Chi'),coupon:num('Coupon'),maturity:String(get(row,'Maturity')??'')});}
+      duration:num('Duration'),chi:num('Chi'),coupon:num('Coupon'),maturity:parseDateAny(get(row,'Maturity'))||String(get(row,'Maturity')??'')});}
   return{bonds,indexName};
 }
 
@@ -339,7 +344,9 @@ function saveRatePrefs(){try{localStorage.setItem('cbattr_rateLevels',document.g
 // Toutes les contributions sont en % de rendement (pas en points de prix) :
 // contribution à l'indice = poids(t0) × rendement, avec rendement = ΔP/P0 converti en devise index via FX.
 // rateMoves : {devise: Δ taux sans risque en bp} entre t0 et t1 (optionnel).
-function computeAttr(t0,t1,aux,rateMoves){
+// d0/d1 : dates ISO des deux fichiers (optionnel) → nombre de jours calendaires pour le carry coupon.
+function computeAttr(t0,t1,aux,rateMoves,d0,d1){
+  const days=(d0&&d1)?Math.max(0,Math.round((Date.parse(d1)-Date.parse(d0))/86400000)):0;
   const m={};t1.forEach(b=>m[b.maceId]=b);const t0s=new Set(t0.map(b=>b.maceId));const t1s=new Set(t1.map(b=>b.maceId));
   const entering=t1.filter(b=>!t0s.has(b.maceId)),leaving=t0.filter(b=>!t1s.has(b.maceId)),results=[];
   // FX implicite par devise : médiane sur titres communs de (ΔMcap USD)/(ΔPrix local).
@@ -364,27 +371,34 @@ function computeAttr(t0,t1,aux,rateMoves){
     const cbPnl=validP?b1.cbPrice-b0.cbPrice:0;
     const cbRetPct=validP?cbPnl/p0*100:0; // rendement local %
     const eqR=b0.eqPrice&&!isNaN(b0.eqPrice)&&b0.eqPrice!==0&&b1.eqPrice&&!isNaN(b1.eqPrice)?((b1.eqPrice/b0.eqPrice-1)*100):0;
+    // Delta/Gamma sont des sensibilités à la parité : on utilise le rendement de la parité (action + ratio + change action/obligation),
+    // avec repli sur le rendement de l'action si la parité manque.
+    const validPar=b0.parity>0&&!isNaN(b0.parity)&&b1.parity>0&&!isNaN(b1.parity);
+    const parR=validPar?((b1.parity/b0.parity-1)*100):eqR;
     const toPct=v=>validP?v/p0*100:0; // points de prix → % de rendement
-    const eqC=toPct((b0.delta/100)*(b0.parity||0)*(eqR/100));
-    const gaC=toPct(0.5*((b0.gamma||0)/100)*eqR*eqR);
+    const eqC=toPct(((b0.delta||0)/100)*(b0.parity||0)*(parR/100));
+    // Gamma = variation du delta (points) pour +1 % de parité → ½ × Γ × Parité × (ΔParité/Parité)²
+    const gaC=toPct(0.5*(b0.gamma||0)*(b0.parity||0)*(parR/100)*(parR/100));
     const sC=toPct((b0.rho||0)*(((b1.creditSpread||0)-(b0.creditSpread||0))/10));
     const vC=toPct((b0.vega||0)*((b1.impliedVol||0)-(b0.impliedVol||0)));
     // Taux : Δr (bp) de la devise de l'obligation ; Duration (années) → −D×Δr, ou Rho (10bp, points de prix) → Rho×Δr/10
     const dr=(rateMoves&&rateMoves[b0.bondCcy]!=null&&!isNaN(rateMoves[b0.bondCcy]))?rateMoves[b0.bondCcy]:0;
     const rC=!validP?0:rateSens==='rho'?toPct((b0.rho||0)*(dr/10)):(-(b0.duration||0)*dr/100);
+    // Carry : coupon couru ACT/365 sur la période, en % du prix (le prix FTSE est un prix clean, l'indice est total return)
+    const carryC=(validP&&days>0&&b0.coupon>0&&!isNaN(b0.coupon))?(b0.coupon*days/365)/p0*100:0;
     const fx=fxRatio[b0.bondCcy]||1;
     const fxC=validP?(fx-1)*100:0;
-    const totRetPct=validP?((1+cbRetPct/100)*fx-1)*100:0; // rendement en devise index
-    const res=totRetPct-(eqC+gaC+sC+vC+rC+fxC);const w=(b0.weight||0)/100;
+    const totRetPct=validP?((1+(cbRetPct+carryC)/100)*fx-1)*100:0; // rendement total en devise index
+    const res=totRetPct-(eqC+gaC+sC+vC+rC+carryC+fxC);const w=(b0.weight||0)/100;
     results.push({...b0,leftIndex,cbPrice_t1:b1.cbPrice,eqPrice_t1:b1.eqPrice,spread_t1:b1.creditSpread,ivol_t1:b1.impliedVol,weight_t1:leftIndex?0:b1.weight,
-      cbPnl,cbRetPct,totRetPct,eqRetPct:eqR,eqContrib:eqC,gammaContrib:gaC,creditContrib:sC,vegaContrib:vC,rateContrib:rC,rateChange:dr,fxContrib:fxC,
+      cbPnl,cbRetPct,totRetPct,eqRetPct:eqR,parityRetPct:parR,days,eqContrib:eqC,gammaContrib:gaC,creditContrib:sC,vegaContrib:vC,rateContrib:rC,rateChange:dr,carryContrib:carryC,fxContrib:fxC,
       spreadChange:(b1.creditSpread||0)-(b0.creditSpread||0),volChange:(b1.impliedVol||0)-(b0.impliedVol||0),
-      residual:res,w,wtdTotal:w*totRetPct,wtdEquity:w*eqC,wtdGamma:w*gaC,wtdCredit:w*sC,wtdVega:w*vC,wtdRate:w*rC,wtdFX:w*fxC,wtdResidual:w*res});});
+      residual:res,w,wtdTotal:w*totRetPct,wtdEquity:w*eqC,wtdGamma:w*gaC,wtdCredit:w*sC,wtdVega:w*vC,wtdRate:w*rC,wtdCarry:w*carryC,wtdFX:w*fxC,wtdResidual:w*res});});
   return{results,entering,leaving,leftCovered,leftUncovered};
 }
 
-function groupBy(res,key){const g={};res.forEach(r=>{const k=r[key]||'Unknown';if(!g[k])g[k]={name:k,weight:0,count:0,wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdRate:0,wtdFX:0,wtdResidual:0};
-  const x=g[k];x.weight+=r.weight||0;x.count++;x.wtdTotal+=r.wtdTotal;x.wtdEquity+=r.wtdEquity;x.wtdGamma+=r.wtdGamma;x.wtdCredit+=r.wtdCredit;x.wtdVega+=r.wtdVega;x.wtdRate+=(r.wtdRate||0);x.wtdFX+=(r.wtdFX||0);x.wtdResidual+=r.wtdResidual});
+function groupBy(res,key){const g={};res.forEach(r=>{const k=r[key]||'Unknown';if(!g[k])g[k]={name:k,weight:0,count:0,wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdRate:0,wtdCarry:0,wtdFX:0,wtdResidual:0};
+  const x=g[k];x.weight+=r.weight||0;x.count++;x.wtdTotal+=r.wtdTotal;x.wtdEquity+=r.wtdEquity;x.wtdGamma+=r.wtdGamma;x.wtdCredit+=r.wtdCredit;x.wtdVega+=r.wtdVega;x.wtdRate+=(r.wtdRate||0);x.wtdCarry+=(r.wtdCarry||0);x.wtdFX+=(r.wtdFX||0);x.wtdResidual+=r.wtdResidual});
   return Object.values(g).sort((a,b)=>b.wtdTotal-a.wtdTotal);}
 
 function groupByIssuer(res){
@@ -392,24 +406,25 @@ function groupByIssuer(res){
   res.forEach(r=>{
     const k=r.issue||'Unknown';
     if(!g[k])g[k]={name:k,sector:r.sector||'',region:r.region||'',bondCcy:r.bondCcy||'',weight:0,count:0,
-      bonds:[],wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdRate:0,wtdFX:0,wtdResidual:0};
+      bonds:[],wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdRate:0,wtdCarry:0,wtdFX:0,wtdResidual:0};
     const x=g[k];x.weight+=r.weight||0;x.count++;
     x.wtdTotal+=r.wtdTotal;x.wtdEquity+=r.wtdEquity;x.wtdGamma+=r.wtdGamma;
-    x.wtdCredit+=r.wtdCredit;x.wtdVega+=r.wtdVega;x.wtdRate+=(r.wtdRate||0);x.wtdFX+=(r.wtdFX||0);x.wtdResidual+=r.wtdResidual;
+    x.wtdCredit+=r.wtdCredit;x.wtdVega+=r.wtdVega;x.wtdRate+=(r.wtdRate||0);x.wtdCarry+=(r.wtdCarry||0);x.wtdFX+=(r.wtdFX||0);x.wtdResidual+=r.wtdResidual;
     x.bonds.push(bondLabel(r));
   });
   return Object.values(g).sort((a,b)=>b.wtdTotal-a.wtdTotal);
 }
 
-function sumResults(res){const s=fn=>res.reduce((a,r)=>a+(fn(r)||0),0);
-  return{wtdTotal:s(r=>r.wtdTotal),wtdEquity:s(r=>r.wtdEquity),wtdGamma:s(r=>r.wtdGamma),wtdCredit:s(r=>r.wtdCredit),wtdVega:s(r=>r.wtdVega),wtdRate:s(r=>r.wtdRate||0),wtdFX:s(r=>r.wtdFX),wtdResidual:s(r=>r.wtdResidual),
-    nBonds:res.length,nPos:res.filter(r=>r.cbPnl>0).length,nNeg:res.filter(r=>r.cbPnl<0).length,avgEqRet:s(r=>r.eqRetPct*r.w)};}
+const LEGS=['wtdTotal','wtdEquity','wtdGamma','wtdCredit','wtdVega','wtdRate','wtdCarry','wtdFX','wtdResidual'];
+function sumResults(res){const s=fn=>res.reduce((a,r)=>a+(fn(r)||0),0);const t={};LEGS.forEach(k=>t[k]=s(r=>r[k]));
+  return{...t,nBonds:res.length,nPos:res.filter(r=>r.cbPnl>0).length,nNeg:res.filter(r=>r.cbPnl<0).length,avgEqRet:s(r=>r.eqRetPct*r.w)};}
+// Totaux mensuels chaînés (Carino) : t.wtdTotal = perf composée Π(1+r_j)−1, chaque jambe somme au total composé
+function monthlyTotals(daily){const t={};LEGS.forEach(k=>t[k]=0);daily.forEach(d=>{const k=d.carino||1;LEGS.forEach(l=>{t[l]+=k*(d[l]||0)})});return t}
 
 // Formatting
 const fmt=(v,d=4)=>(v==null||isNaN(v))?'—':v.toFixed(d);
 const fS=(v,d=4)=>(v==null||isNaN(v))?'—':(v>=0?'+':'')+v.toFixed(d);
 const fP=(v,d=2)=>(v==null||isNaN(v))?'—':(v>=0?'+':'')+((v)*100).toFixed(d);
-const fPpct=(v,d=4)=>(v==null||isNaN(v))?'—':(v>=0?'+':'')+v.toFixed(d)+'%';
 const p2=v=>(v==null||isNaN(v))?'—':(v>=0?'+':'')+v.toFixed(2)+'%';
 const cc=v=>v>0.0005?'pos':v<-0.0005?'neg':'neu';
 const bc=v=>v>0.0005?'bg-pos':v<-0.0005?'bg-neg':'';
@@ -480,7 +495,7 @@ function renderRecon(boxId,contentId,totals,realP){
   const box=document.getElementById(boxId);const hasR=realP!==null&&!isNaN(realP);
   if(!hasR){box.classList.add('hidden');return}
   box.classList.remove('hidden');const gap=realP-totals.wtdTotal;
-  const rows=[{l:'Equity / Delta',v:totals.wtdEquity},{l:'Gamma',v:totals.wtdGamma},{l:'Crédit / Spread',v:totals.wtdCredit},{l:'Vega / Vol',v:totals.wtdVega},{l:'Taux',v:totals.wtdRate||0},{l:'FX',v:totals.wtdFX||0},{l:'Résiduel bond-level',v:totals.wtdResidual}];
+  const rows=[{l:'Equity / Delta',v:totals.wtdEquity},{l:'Gamma',v:totals.wtdGamma},{l:'Crédit / Spread',v:totals.wtdCredit},{l:'Vega / Vol',v:totals.wtdVega},{l:'Taux',v:totals.wtdRate||0},{l:'Carry (coupon couru)',v:totals.wtdCarry||0},{l:'FX',v:totals.wtdFX||0},{l:'Résiduel bond-level',v:totals.wtdResidual}];
   document.getElementById(contentId).innerHTML=rows.map(r=>`<div class="recon-row indent"><span>${r.l}</span><span class="recon-val ${cc(r.v)}">${fP(r.v)} bps</span></div>`).join('')+
     `<div class="recon-row total"><span>= Performance Théorique</span><span class="recon-val ${cc(totals.wtdTotal)}">${fP(totals.wtdTotal)} bps</span></div>
     <div class="recon-row gap"><span>+ Écart Inexpliqué</span><span class="recon-val" style="color:#f59e0b">${fP(gap)} bps</span></div>
@@ -505,7 +520,7 @@ function buildTable(container,cols,data,tid,mh){
   container.querySelectorAll('th[data-t]').forEach(th=>{th.addEventListener('click',()=>{const t=th.dataset.t,ci=parseInt(th.dataset.c);if(sortSt[t].col===ci)sortSt[t].asc=!sortSt[t].asc;else{sortSt[t].col=ci;sortSt[t].asc=true};renderCurrentTab()})});}
 
 const grpCols=[
-  {header:'Nom',val:r=>r.name,left:true,fmt:v=>v},
+  {header:'Nom',val:r=>r.name,left:true,fmt:v=>esc(v)},
   {header:'Poids(%)',val:r=>r.weight,fmt:v=>fmt(v,2)},
   {header:'#',val:r=>r.count,fmt:v=>String(v)},
   {header:'Total',val:r=>r.wtdTotal,fmt:v=>fP(v),clr:true,bg:true},
@@ -513,14 +528,14 @@ const grpCols=[
   {header:'Gamma',val:r=>r.wtdGamma,fmt:v=>fP(v),clr:true},
   {header:'Crédit',val:r=>r.wtdCredit,fmt:v=>fP(v),clr:true},
   {header:'Vega',val:r=>r.wtdVega,fmt:v=>fP(v),clr:true},
-  {header:'Taux',val:r=>r.wtdRate,fmt:v=>fP(v),clr:true},
+  {header:'Taux',val:r=>r.wtdRate,fmt:v=>fP(v),clr:true},{header:'Carry',val:r=>r.wtdCarry,fmt:v=>fP(v),clr:true},
   {header:'FX',val:r=>r.wtdFX,fmt:v=>fP(v),clr:true},
   {header:'Résiduel',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true}];
 
 const bndCols=[
-  {header:'Issue',val:r=>bondLabel(r),left:true,fmt:(v,row)=>((v||'').substring(0,28))+(row&&row.leftIndex?' <span style="color:#f59e0b" title="Sortie de l\'index (rebalancement)">⏏</span>':'')},
-  {header:'Secteur',val:r=>r.sector,left:true,fmt:v=>(v||'').substring(0,14)},
-  {header:'Région',val:r=>r.region,left:true,fmt:v=>(v||'').substring(0,13)},
+  {header:'Issue',val:r=>bondLabel(r),left:true,fmt:(v,row)=>esc((v||'').substring(0,28))+(row&&row.leftIndex?' <span style="color:#f59e0b" title="Sortie de l\'index (rebalancement)">⏏</span>':'')},
+  {header:'Secteur',val:r=>r.sector,left:true,fmt:v=>esc((v||'').substring(0,14))},
+  {header:'Région',val:r=>r.region,left:true,fmt:v=>esc((v||'').substring(0,13))},
   {header:'Poids(%)',val:r=>r.weight,fmt:v=>fmt(v,2)},
   {header:'ΔCB',val:r=>r.cbPnl,fmt:v=>fS(v,2),clr:true},
   {header:'Eq%',val:r=>r.eqRetPct,fmt:v=>p2(v),clr:true},
@@ -530,24 +545,25 @@ const bndCols=[
   {header:'Wtd Cr',val:r=>r.wtdCredit,fmt:v=>fP(v),clr:true},
   {header:'Wtd V',val:r=>r.wtdVega,fmt:v=>fP(v),clr:true},
   {header:'Wtd Tx',val:r=>r.wtdRate,fmt:v=>fP(v),clr:true},
+  {header:'Wtd Cy',val:r=>r.wtdCarry,fmt:v=>fP(v),clr:true},
   {header:'Wtd FX',val:r=>r.wtdFX,fmt:v=>fP(v),clr:true},
   {header:'Wtd Res',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true},
   {header:'↗',val:r=>'',fmt:(v,row)=>pricerCell(row)}];
 
 const issuerCols=[
-  {header:'Émetteur',val:r=>r.name,left:true,fmt:v=>(v||'').substring(0,24)},
-  {header:'Secteur',val:r=>r.sector,left:true,fmt:v=>(v||'').substring(0,14)},
-  {header:'Région',val:r=>r.region,left:true,fmt:v=>(v||'').substring(0,13)},
-  {header:'Devise',val:r=>r.bondCcy,left:true,fmt:v=>v},
+  {header:'Émetteur',val:r=>r.name,left:true,fmt:v=>esc((v||'').substring(0,24))},
+  {header:'Secteur',val:r=>r.sector,left:true,fmt:v=>esc((v||'').substring(0,14))},
+  {header:'Région',val:r=>r.region,left:true,fmt:v=>esc((v||'').substring(0,13))},
+  {header:'Devise',val:r=>r.bondCcy,left:true,fmt:v=>esc(v)},
   {header:'Poids(%)',val:r=>r.weight,fmt:v=>fmt(v,2)},
   {header:'#Bonds',val:r=>r.count,fmt:v=>String(v)},
-  {header:'Obligations',val:r=>r.bonds.join(', '),left:true,fmt:v=>(v||'').substring(0,50)},
+  {header:'Obligations',val:r=>r.bonds.join(', '),left:true,fmt:v=>esc((v||'').substring(0,50))},
   {header:'Total',val:r=>r.wtdTotal,fmt:v=>fP(v),clr:true,bg:true},
   {header:'Equity',val:r=>r.wtdEquity,fmt:v=>fP(v),clr:true},
   {header:'Gamma',val:r=>r.wtdGamma,fmt:v=>fP(v),clr:true},
   {header:'Crédit',val:r=>r.wtdCredit,fmt:v=>fP(v),clr:true},
   {header:'Vega',val:r=>r.wtdVega,fmt:v=>fP(v),clr:true},
-  {header:'Taux',val:r=>r.wtdRate,fmt:v=>fP(v),clr:true},
+  {header:'Taux',val:r=>r.wtdRate,fmt:v=>fP(v),clr:true},{header:'Carry',val:r=>r.wtdCarry,fmt:v=>fP(v),clr:true},
   {header:'FX',val:r=>r.wtdFX,fmt:v=>fP(v),clr:true},
   {header:'Résiduel',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true}];
 
@@ -556,29 +572,39 @@ const issuerCols=[
 // ═══════════════════════════════════════════════════════════════════════
 let dData=null,dTab='sector',dRealPerf=null,bondsT0=null,bondsT1=null,bondsAux=null,dDates={t0:null,t1:null};
 
-function renderRebalWarn(elId,leaving,leftCovered,leftUncovered,rebalWed){
-  const el=document.getElementById(elId);
-  if(!leaving||!leaving.length){el.classList.add('hidden');return}
-  const wTot=leaving.reduce((a,b)=>a+(b.weight||0),0);
-  let msg=`⚠ Rebalancement détecté : <strong>${leaving.length} obligations sortantes</strong> entre T₀ et T₁ (${wTot.toFixed(2)}% du poids de l'index).`;
+function renderRebalWarn(elId,leaving,leftCovered,leftUncovered,rebalWed,entering){
+  const el=document.getElementById(elId);entering=entering||[];
+  if(!leaving||!leaving.length){
+    if(!entering.length){el.classList.add('hidden');return}
+    const wIn=entering.reduce((a,b)=>a+(b.weight||0),0);
+    el.innerHTML=`ℹ <strong>${entering.length} obligations entrantes</strong> en T₁ (${wIn.toFixed(2)}% du poids T₁) — poids nul en T₀, donc sans contribution sur la journée.`;el.classList.remove('hidden');return}
+  const wTot=leaving.reduce((a,b)=>a+(b.weight||0),0);const wIn=entering.reduce((a,b)=>a+(b.weight||0),0);
+  let msg=`⚠ Rebalancement détecté : <strong>${leaving.length} obligations sortantes</strong> (${wTot.toFixed(2)}% du poids T₀)`+(entering.length?`, <strong>${entering.length} entrantes</strong> (${wIn.toFixed(2)}% du poids T₁)`:'')+` entre T₀ et T₁.`;
   if(rebalWed)msg+=` Cohérent avec le rebalancement mensuel effectif le <strong>${rebalWed}</strong> au soir (2ᵉ mercredi).`;
-  if(leftCovered>0)msg+=` Couvertes via fichier annexe : <strong>${leftCovered.toFixed(2)}%</strong>.`;
+  if(leftCovered>0)msg+=` Sortantes couvertes via fichier annexe : <strong>${leftCovered.toFixed(2)}%</strong>.`;
   if(leftUncovered>0.005)msg+=` <strong>Non couvertes : ${leftUncovered.toFixed(2)}%</strong> — leur performance du jour manque au total théorique. Chargez le fichier annexe T₁ de l'index broad (ex: UCBINDEX0001) pour les pricer.`;
   el.innerHTML=msg;el.classList.remove('hidden');}
+// Cohérence des dates lues dans les noms de fichiers (carry, Δ taux et détection de rebalancement en dépendent)
+function renderDateWarn(){
+  const el=document.getElementById('dDateWarn');let msg='';
+  if(!dDates.t0||!dDates.t1)msg='⚠ Date non détectée dans le nom d\'un fichier (format attendu AAAAMMJJ_UCBINDEXxxxx). Sans dates : pas de carry coupon, pas de Δ taux depuis le tableau de niveaux, pas de détection du rebalancement mensuel.';
+  else if(dDates.t1<=dDates.t0)msg=`⚠ T₁ (${dDates.t1}) n'est pas postérieur à T₀ (${dDates.t0}) — vérifiez l'ordre des fichiers.`;
+  else{const days=Math.round((Date.parse(dDates.t1)-Date.parse(dDates.t0))/86400000);if(days>4)msg=`ℹ ${days} jours calendaires entre T₀ et T₁ — le carry coupon est calculé sur cette durée.`}
+  el.innerHTML=msg;el.classList.toggle('hidden',!msg);}
 
 function renderDaily(){
   if(!dData)return;const{results,entering,leaving,leftCovered,leftUncovered}=dData;
   document.getElementById('dEmpty').classList.add('hidden');document.getElementById('dailyResults').classList.remove('hidden');
   const t=sumResults(results);const hasR=dRealPerf!==null;const gap=hasR?dRealPerf-t.wtdTotal:null;
-  renderRebalWarn('dRebalWarn',leaving,leftCovered,leftUncovered,rebalDateIn(dDates.t0,dDates.t1));
+  renderRebalWarn('dRebalWarn',leaving,leftCovered,leftUncovered,rebalDateIn(dDates.t0,dDates.t1),entering);renderDateWarn();
   const cd=[{label:hasR?'Perf Réelle':'Total Théo',value:hasR?dRealPerf:t.wtdTotal,sub:t.nBonds+' obligations'},
     {label:'Equity',value:t.wtdEquity},{label:'Gamma',value:t.wtdGamma},{label:'Crédit',value:t.wtdCredit},
-    {label:'Vega',value:t.wtdVega},{label:'Taux',value:t.wtdRate},{label:'FX',value:t.wtdFX},{label:'Résiduel',value:t.wtdResidual,sub:'Theta+Autre'}];
-  if(hasR)cd.push({label:'Écart',value:gap,sub:'Rebal/Coupons/Timing'});
+    {label:'Vega',value:t.wtdVega},{label:'Taux',value:t.wtdRate},{label:'Carry',value:t.wtdCarry},{label:'FX',value:t.wtdFX},{label:'Résiduel',value:t.wtdResidual,sub:'Theta/convexité/autre'}];
+  if(hasR)cd.push({label:'Écart',value:gap,sub:'Rebal/Timing/Coupons détachés'});
   renderCards('dCardsRow',cd);renderRecon('dReconBox','dReconContent',t,dRealPerf);
   document.getElementById('dStatsBar').innerHTML=`<span>↑ <strong class="pos">${t.nPos}</strong></span><span>↓ <strong class="neg">${t.nNeg}</strong></span><span>Eq wtd: <strong class="${cc(t.avgEqRet)}">${p2(t.avgEqRet)}</strong></span>${hasR?'<span>Écart: <strong style="color:#f59e0b">'+fP(gap)+' bps</strong></span>':''}`;
-  renderWF('dWfTheo',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Taux',v:t.wtdRate},{label:'FX',v:t.wtdFX},{label:'Résiduel',v:t.wtdResidual},{label:'TOTAL',v:t.wtdTotal,isTotal:true}]);
-  const rh=document.getElementById('dWfRealHalf');if(hasR){rh.classList.remove('hidden');renderWF('dWfRecon',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Taux',v:t.wtdRate},{label:'FX',v:t.wtdFX},{label:'Rés.',v:t.wtdResidual},{label:'Écart',v:gap,isGap:true},{label:'RÉEL',v:dRealPerf,isTotal:true}]);}else rh.classList.add('hidden');
+  renderWF('dWfTheo',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Taux',v:t.wtdRate},{label:'Carry',v:t.wtdCarry},{label:'FX',v:t.wtdFX},{label:'Résiduel',v:t.wtdResidual},{label:'TOTAL',v:t.wtdTotal,isTotal:true}]);
+  const rh=document.getElementById('dWfRealHalf');if(hasR){rh.classList.remove('hidden');renderWF('dWfRecon',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Taux',v:t.wtdRate},{label:'Carry',v:t.wtdCarry},{label:'FX',v:t.wtdFX},{label:'Rés.',v:t.wtdResidual},{label:'Écart',v:gap,isGap:true},{label:'RÉEL',v:dRealPerf,isTotal:true}]);}else rh.classList.add('hidden');
   renderDailyTab();}
 
 function renderDailyTab(){if(!dData)return;const{results}=dData;const c=document.getElementById('dTabContent');const s=[...results].sort((a,b)=>b.wtdTotal-a.wtdTotal);
@@ -628,12 +654,12 @@ function updateRateStatusD(){
   const rm=dailyRateMoves();const cov=rateCoverage(bondsT0,rm);const miss=ccysOf(bondsT0).filter(c=>rm[c]==null);
   if(!Object.keys(rm).length)setRateStatus('rateStatusD','non renseignés — contribution taux = 0 (reste dans le résiduel)','warn');
   else setRateStatus('rateStatusD',(rateSens==='rho'?'Rho (10bp)':'Duration')+' · '+Object.keys(rm).map(c=>c+' '+fS(rm[c],1)+'bp').join(', ')+' · couverture '+cov.toFixed(1)+'% du poids'+(miss.length?' — sans donnée : '+miss.join(', '):''),miss.length?'warn':'ok');}
-function recomputeDaily(){updateRateStatusD();if(bondsT0&&bondsT1){dData=computeAttr(bondsT0,bondsT1,bondsAux,dailyRateMoves());renderDaily()}}
+function recomputeDaily(){updateRateStatusD();if(bondsT0&&bondsT1){dData=computeAttr(bondsT0,bondsT1,bondsAux,dailyRateMoves(),dDates.t0,dDates.t1);renderDaily()}}
 
 document.getElementById('applyPerfD').addEventListener('click',()=>{const v=parseFloat(document.getElementById('realPerfD').value.replace(',','.'));dRealPerf=isNaN(v)?null:v;const st=document.getElementById('perfStatusD');if(dRealPerf!==null){st.classList.remove('hidden');st.textContent='✓ '+fP(dRealPerf)+' bps'}else st.classList.add('hidden');if(dData)renderDaily()});
 document.getElementById('realPerfD').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('applyPerfD').click()});
 document.querySelectorAll('#dTabs .tab').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('#dTabs .tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');dTab=b.dataset.tab;sortSt={};renderDailyTab()})});
-document.getElementById('dExportCSV').addEventListener('click',()=>{if(dData)exportCSV(dData.results)});
+document.getElementById('dExportCSV').addEventListener('click',()=>{if(dData)exportCSV(dData.results,true)});
 
 // ═══════════════════════════════════════════════════════════════════════
 // MONTHLY MODE
@@ -677,7 +703,7 @@ function renderRegionFilterBar(){
   const nShown=applyFilters(mCumData?.bonds||[]).length;const filtered=!allActive||!!mSearchQuery.trim();
   chips.innerHTML='<span class="rf-label">Régions :</span>'+
     `<button class="rf-chip ${allActive?'active':''}" data-region="__all">Toutes</button>`+
-    regions.map(r=>`<button class="rf-chip ${mRegionSel.has(r)?'active':''}" data-region="${r}">${r}</button>`).join('')+
+    regions.map(r=>`<button class="rf-chip ${mRegionSel.has(r)?'active':''}" data-region="${esc(r)}">${esc(r)}</button>`).join('')+
     `<span class="rf-count">${nShown} obligation${nShown>1?'s':''}${filtered?' affichées':''}</span>`;
   chips.querySelectorAll('.rf-chip').forEach(ch=>ch.addEventListener('click',()=>{
     const reg=ch.dataset.region;
@@ -726,18 +752,20 @@ function computeMonthly(){
   const byName={};
   mFiles.forEach(f=>{const p=mParsed[f.name];if(!p)return;const k=p.indexName||'?';(byName[k]=byName[k]||[]).push(p)});
   const names=Object.keys(byName).sort((a,b)=>byName[b].length-byName[a].length||byName[a][0].bonds.length-byName[b][0].bonds.length);
-  mBonds={};mAux={};
+  mBonds={};mAux={};const dupDates=new Set();
   if(names.length){const primary=names[0];
     Object.values(mParsed).forEach(p=>{
-      if((p.indexName||'?')===primary)mBonds[p.date]=p.bonds;
+      if((p.indexName||'?')===primary){if(mBonds[p.date])dupDates.add(p.date);mBonds[p.date]=p.bonds}
       else mAux[p.date]=(mAux[p.date]||[]).concat(p.bonds)});}
   const dates=Object.keys(mBonds).sort();
+  const errM=document.getElementById('errorM');
+  if(dupDates.size){errM.textContent='⚠ Plusieurs fichiers de l\'index principal pour la même date ('+[...dupDates].sort().join(', ')+') — le dernier chargé est utilisé.';errM.classList.remove('hidden')}
   if(dates.length<2){document.getElementById('monthlyResults').classList.add('hidden');document.getElementById('mEmpty').classList.remove('hidden');return}
 
   mDailyAttr=[];
   for(let i=1;i<dates.length;i++){
     const rm=rateMovesFor(ccysOf(mBonds[dates[i-1]]),dates[i-1],dates[i]);
-    const attr=computeAttr(mBonds[dates[i-1]],mBonds[dates[i]],mAux[dates[i]],rm);const t=sumResults(attr.results);
+    const attr=computeAttr(mBonds[dates[i-1]],mBonds[dates[i]],mAux[dates[i]],rm,dates[i-1],dates[i]);const t=sumResults(attr.results);
     mDailyAttr.push({date:dates[i],from:dates[i-1],results:attr.results,entering:attr.entering,leaving:attr.leaving,leftCovered:attr.leftCovered,leftUncovered:attr.leftUncovered,rateMoves:rm,rateCov:rateCoverage(mBonds[dates[i-1]],rm),...t});}
   updateRateStatusM();
 
@@ -752,12 +780,12 @@ function computeMonthly(){
   const bondCum={};
   mDailyAttr.forEach(day=>{const k=day.carino||1;day.results.forEach(r=>{
     if(!bondCum[r.maceId])bondCum[r.maceId]={maceId:r.maceId,issue:r.issue,isin:r.isin,sector:r.sector,region:r.region,bondCcy:r.bondCcy,coupon:r.coupon,maturity:r.maturity,weight:0,nDays:0,
-      cbPnl:0,eqRetPct:0,wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdRate:0,wtdFX:0,wtdResidual:0};
+      cbPnl:0,eqRetPct:0,wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdRate:0,wtdCarry:0,wtdFX:0,wtdResidual:0};
     const c=bondCum[r.maceId];c.weight+=r.weight;c.nDays++;c.cbPnl+=r.cbPnl;c.eqRetPct+=r.eqRetPct;
-    c.wtdTotal+=k*r.wtdTotal;c.wtdEquity+=k*r.wtdEquity;c.wtdGamma+=k*r.wtdGamma;c.wtdCredit+=k*r.wtdCredit;c.wtdVega+=k*r.wtdVega;c.wtdRate+=k*(r.wtdRate||0);c.wtdFX+=k*(r.wtdFX||0);c.wtdResidual+=k*r.wtdResidual})});
+    c.wtdTotal+=k*r.wtdTotal;c.wtdEquity+=k*r.wtdEquity;c.wtdGamma+=k*r.wtdGamma;c.wtdCredit+=k*r.wtdCredit;c.wtdVega+=k*r.wtdVega;c.wtdRate+=k*(r.wtdRate||0);c.wtdCarry+=k*(r.wtdCarry||0);c.wtdFX+=k*(r.wtdFX||0);c.wtdResidual+=k*r.wtdResidual})});
   // Average weight
   Object.values(bondCum).forEach(c=>{c.weight=c.weight/c.nDays});
-  mCumData={bonds:Object.values(bondCum),dates,daily:mDailyAttr,compounded:Rtot*100};
+  mCumData={bonds:Object.values(bondCum),dates,daily:mDailyAttr};
   renderMonthly();}
 
 function renderMonthly(){
@@ -765,9 +793,7 @@ function renderMonthly(){
   document.getElementById('mEmpty').classList.add('hidden');document.getElementById('monthlyResults').classList.remove('hidden');
 
   const bonds=mCumData.bonds;const daily=mCumData.daily;
-  // Totaux mensuels chaînés (Carino) : t.wtdTotal = perf composée Π(1+r_j)−1
-  const t={wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdRate:0,wtdFX:0,wtdResidual:0};
-  daily.forEach(d=>{const k=d.carino||1;t.wtdTotal+=k*d.wtdTotal;t.wtdEquity+=k*d.wtdEquity;t.wtdGamma+=k*d.wtdGamma;t.wtdCredit+=k*d.wtdCredit;t.wtdVega+=k*d.wtdVega;t.wtdRate+=k*(d.wtdRate||0);t.wtdFX+=k*(d.wtdFX||0);t.wtdResidual+=k*d.wtdResidual});
+  const t=monthlyTotals(daily);
   const nBonds=bonds.length;const hasR=mRealPerf!==null;const gap=hasR?mRealPerf-t.wtdTotal:null;
 
   // Avertissement rebalancement : jours avec sortants non couverts
@@ -785,14 +811,14 @@ function renderMonthly(){
 
   const cd=[{label:hasR?'Perf Réelle':'Total Théo',value:hasR?mRealPerf:t.wtdTotal,sub:daily.length+' jours composés, '+nBonds+' obligations'},
     {label:'Equity',value:t.wtdEquity},{label:'Gamma',value:t.wtdGamma},{label:'Crédit',value:t.wtdCredit},
-    {label:'Vega',value:t.wtdVega},{label:'Taux',value:t.wtdRate},{label:'FX',value:t.wtdFX},{label:'Résiduel',value:t.wtdResidual,sub:'Theta+Autre'}];
-  if(hasR)cd.push({label:'Écart',value:gap,sub:'Rebal/Coupons/Timing'});
+    {label:'Vega',value:t.wtdVega},{label:'Taux',value:t.wtdRate},{label:'Carry',value:t.wtdCarry},{label:'FX',value:t.wtdFX},{label:'Résiduel',value:t.wtdResidual,sub:'Theta/convexité/autre'}];
+  if(hasR)cd.push({label:'Écart',value:gap,sub:'Rebal/Timing/Coupons détachés'});
   renderCards('mCardsRow',cd);renderRecon('mReconBox','mReconContent',t,mRealPerf);
 
   document.getElementById('mStatsBar').innerHTML=`<span>Période: <strong style="color:#e2e8f0">${mCumData.dates[0]} → ${mCumData.dates[mCumData.dates.length-1]}</strong></span><span>${daily.length} jours</span><span>${nBonds} obligations</span>${hasR?'<span>Écart: <strong style="color:#f59e0b">'+fP(gap)+' bps</strong></span>':''}`;
 
-  renderWF('mWfTheo',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Taux',v:t.wtdRate},{label:'FX',v:t.wtdFX},{label:'Résiduel',v:t.wtdResidual},{label:'TOTAL',v:t.wtdTotal,isTotal:true}]);
-  const rh=document.getElementById('mWfRealHalf');if(hasR){rh.classList.remove('hidden');renderWF('mWfRecon',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Taux',v:t.wtdRate},{label:'FX',v:t.wtdFX},{label:'Rés.',v:t.wtdResidual},{label:'Écart',v:gap,isGap:true},{label:'RÉEL',v:mRealPerf,isTotal:true}]);}else rh.classList.add('hidden');
+  renderWF('mWfTheo',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Taux',v:t.wtdRate},{label:'Carry',v:t.wtdCarry},{label:'FX',v:t.wtdFX},{label:'Résiduel',v:t.wtdResidual},{label:'TOTAL',v:t.wtdTotal,isTotal:true}]);
+  const rh=document.getElementById('mWfRealHalf');if(hasR){rh.classList.remove('hidden');renderWF('mWfRecon',[{label:'Equity',v:t.wtdEquity},{label:'Gamma',v:t.wtdGamma},{label:'Crédit',v:t.wtdCredit},{label:'Vega',v:t.wtdVega},{label:'Taux',v:t.wtdRate},{label:'Carry',v:t.wtdCarry},{label:'FX',v:t.wtdFX},{label:'Rés.',v:t.wtdResidual},{label:'Écart',v:gap,isGap:true},{label:'RÉEL',v:mRealPerf,isTotal:true}]);}else rh.classList.add('hidden');
 
   // Chart
   renderCumChart(daily);
@@ -849,10 +875,10 @@ function renderCumChart(daily){
         }
       },
       scales:{
-        x:{stacked:true,ticks:{color:'#64748b',font:{family:'JetBrains Mono',size:10},maxRotation:45},grid:{color:'rgba(30,41,59,0.3)',drawBorder:false}},
+        x:{stacked:true,ticks:{color:'#64748b',font:{family:'JetBrains Mono',size:10},maxRotation:45},grid:{color:'rgba(30,41,59,0.3)'},border:{display:false}},
         y:{stacked:true,min:Math.floor(yMin-pad),max:Math.ceil(yMax+pad),
           ticks:{color:'#64748b',font:{family:'JetBrains Mono',size:10},callback:function(v){return v.toFixed(0)+' bps'}},
-          grid:{color:'rgba(30,41,59,0.4)',drawBorder:false},
+          grid:{color:'rgba(30,41,59,0.4)'},border:{display:false},
           afterFit:function(axis){axis.paddingTop=10;axis.paddingBottom=10}
         }
       }
@@ -868,16 +894,12 @@ function renderMonthlyTab(){
     const cols=[{header:'Date',val:r=>r.date,left:true,fmt:v=>v},{header:'Total',val:r=>r.wtdTotal,fmt:v=>fP(v),clr:true,bg:true},
       {header:'Equity',val:r=>r.wtdEquity,fmt:v=>fP(v),clr:true},{header:'Gamma',val:r=>r.wtdGamma,fmt:v=>fP(v),clr:true},
       {header:'Crédit',val:r=>r.wtdCredit,fmt:v=>fP(v),clr:true},{header:'Vega',val:r=>r.wtdVega,fmt:v=>fP(v),clr:true},
-      {header:'Taux',val:r=>r.wtdRate,fmt:v=>fP(v),clr:true},
+      {header:'Taux',val:r=>r.wtdRate,fmt:v=>fP(v),clr:true},{header:'Carry',val:r=>r.wtdCarry,fmt:v=>fP(v),clr:true},
       {header:'FX',val:r=>r.wtdFX,fmt:v=>fP(v),clr:true},
       {header:'Résiduel',val:r=>r.wtdResidual,fmt:v=>fP(v),clr:true},{header:'#Bonds',val:r=>r.nBonds,fmt:v=>String(v)},
       {header:'Sort.%',val:r=>r.leftUncovered||0,fmt:v=>v>0.005?'<span style="color:#f59e0b">'+v.toFixed(2)+'</span>':'—'},
       {header:'↑',val:r=>r.nPos,fmt:v=>String(v)},{header:'↓',val:r=>r.nNeg,fmt:v=>String(v)}];
-    // Add cumulative row at bottom
-    let cumT=0,cumE=0,cumG=0,cumC=0,cumV=0,cumR=0;
-    const dailyWithCum=daily.map(d=>{cumT+=d.wtdTotal;cumE+=d.wtdEquity;cumG+=d.wtdGamma;cumC+=d.wtdCredit;cumV+=d.wtdVega;cumR+=d.wtdResidual;
-      return{...d,cumTotal:cumT}});
-    buildTable(c,cols,dailyWithCum,'md',500);
+    buildTable(c,cols,daily,'md',500);
   } else if(mTab==='msector')buildTable(c,grpCols,groupBy(allBonds,'sector'),'ms',600);
   else if(mTab==='mregion')buildTable(c,grpCols,groupBy(allBonds,'region'),'mr',600);
   else if(mTab==='missuer')buildTable(c,issuerCols,groupByIssuer(bonds),'mi',600);
@@ -897,8 +919,8 @@ function renderCBDetailTab(container){
   const sorted=[...bonds].sort((a,b)=>Math.abs(b.wtdTotal)-Math.abs(a.wtdTotal));
   if(!cbSelectedId||!bonds.find(b=>b.maceId===cbSelectedId))cbSelectedId=sorted[0]?.maceId||null;
   const options=sorted.map(b=>{
-    const lab=bondLabel(b);const contrib=(b.wtdTotal*10000).toFixed(2);
-    return`<option value="${b.maceId}" ${b.maceId===cbSelectedId?'selected':''}>${lab} — ${b.isin||'—'}  [${contrib>=0?'+':''}${contrib} bps]</option>`;
+    const lab=bondLabel(b);const contrib=fP(b.wtdTotal);
+    return`<option value="${b.maceId}" ${b.maceId===cbSelectedId?'selected':''}>${esc(lab)} — ${esc(b.isin||'—')}  [${contrib} bps]</option>`;
   }).join('');
   container.innerHTML=`<div class="cb-selector-row"><label>Obligation :</label><select class="cb-select" id="cbSelector">${options}</select><span style="font-size:11px;color:#475569">${sorted.length} obligations — triées par |contribution|</span></div><div id="cbDetailDisplay"></div>`;
   document.getElementById('cbSelector').addEventListener('change',e=>{cbSelectedId=e.target.value;renderCBDetailDisplay()});
@@ -916,21 +938,21 @@ function renderCBDetailDisplay(){
   const firstRaw=rawSeries.find(x=>x.b);
   // Build info bar
   const info=firstRaw?.b||{};
-  const totalBps=(bondCum?.wtdTotal||0)*10000;
   const pricerHref=cbPricerURL(bondCum||info);
   el.innerHTML=`
     <div class="cb-info-bar">
-      <div><div class="lbl">Issue</div><div class="val">${bondLabel(info)}</div></div>
-      <div><div class="lbl">ISIN</div><div class="val">${info.isin||'—'}</div></div>
-      <div><div class="lbl">Secteur</div><div class="val">${info.sector||'—'}</div></div>
-      <div><div class="lbl">Région</div><div class="val">${info.region||'—'}</div></div>
+      <div><div class="lbl">Issue</div><div class="val">${esc(bondLabel(info))}</div></div>
+      <div><div class="lbl">ISIN</div><div class="val">${esc(info.isin||'—')}</div></div>
+      <div><div class="lbl">Secteur</div><div class="val">${esc(info.sector||'—')}</div></div>
+      <div><div class="lbl">Région</div><div class="val">${esc(info.region||'—')}</div></div>
       <div><div class="lbl">Devise</div><div class="val">${info.bondCcy||'—'}</div></div>
       <div><div class="lbl">Poids moy.</div><div class="val">${fmt(bondCum?.weight,2)}%</div></div>
-      <div><div class="lbl">Σ Wtd Total</div><div class="val ${cc(bondCum?.wtdTotal||0)}">${(totalBps>=0?'+':'')+totalBps.toFixed(2)} bps</div></div>
+      <div><div class="lbl">Σ Wtd Total</div><div class="val ${cc(bondCum?.wtdTotal||0)}">${fP(bondCum?.wtdTotal||0)} bps</div></div>
       <div><div class="lbl">Σ Eq</div><div class="val ${cc(bondCum?.wtdEquity||0)}">${fP(bondCum?.wtdEquity||0)} bps</div></div>
       <div><div class="lbl">Σ Crédit</div><div class="val ${cc(bondCum?.wtdCredit||0)}">${fP(bondCum?.wtdCredit||0)} bps</div></div>
       <div><div class="lbl">Σ Vega</div><div class="val ${cc(bondCum?.wtdVega||0)}">${fP(bondCum?.wtdVega||0)} bps</div></div>
       <div><div class="lbl">Σ Taux</div><div class="val ${cc(bondCum?.wtdRate||0)}">${fP(bondCum?.wtdRate||0)} bps</div></div>
+      <div><div class="lbl">Σ Carry</div><div class="val ${cc(bondCum?.wtdCarry||0)}">${fP(bondCum?.wtdCarry||0)} bps</div></div>
       <div><div class="lbl">Σ FX</div><div class="val ${cc(bondCum?.wtdFX||0)}">${fP(bondCum?.wtdFX||0)} bps</div></div>
       <div style="margin-left:auto;align-self:center"><a class="pricer-link lg" target="_blank" rel="noopener" href="${pricerHref}" title="Ouvrir cette CB dans cb_pricer">↗ cb_pricer</a></div>
     </div>
@@ -976,17 +998,18 @@ function renderCBChart(rawSeries){
 
 function renderCBDailyTable(series,rawSeries){
   // Join: each row = day with t0->t1 attribution + raw values
+  const daily=mCumData.daily;
   const rows=series.map((s,i)=>{
     const r=s.r;const prev=rawSeries[i]?.b;const curr=rawSeries[i+1]?.b;
     return{
-      date:s.date,
+      date:s.date,carino:daily[i]?.carino||1,
       cbT0:prev?.cbPrice,cbT1:curr?.cbPrice,
       eqT0:prev?.eqPrice,eqT1:curr?.eqPrice,
       spT0:prev?.creditSpread,spT1:curr?.creditSpread,
       cbPnl:r?.cbPnl,eqRetPct:r?.eqRetPct,
       dSpread:r?.spreadChange,dVol:r?.volChange,dRate:r?.rateChange,
       weight:r?.weight,
-      wtdTotal:r?.wtdTotal,wtdEquity:r?.wtdEquity,wtdGamma:r?.wtdGamma,wtdCredit:r?.wtdCredit,wtdVega:r?.wtdVega,wtdRate:r?.wtdRate,wtdFX:r?.wtdFX,wtdResidual:r?.wtdResidual,
+      wtdTotal:r?.wtdTotal,wtdEquity:r?.wtdEquity,wtdGamma:r?.wtdGamma,wtdCredit:r?.wtdCredit,wtdVega:r?.wtdVega,wtdRate:r?.wtdRate,wtdCarry:r?.wtdCarry,wtdFX:r?.wtdFX,wtdResidual:r?.wtdResidual,
       missing:!r
     };
   });
@@ -1011,15 +1034,16 @@ function renderCBDailyTable(series,rawSeries){
     {header:'Wtd Cr',val:r=>r.wtdCredit,fmt:v=>v==null?'—':fP(v),clr:true},
     {header:'Wtd V',val:r=>r.wtdVega,fmt:v=>v==null?'—':fP(v),clr:true},
     {header:'Wtd Tx',val:r=>r.wtdRate,fmt:v=>v==null?'—':fP(v),clr:true},
+    {header:'Wtd Cy',val:r=>r.wtdCarry,fmt:v=>v==null?'—':fP(v),clr:true},
     {header:'Wtd FX',val:r=>r.wtdFX,fmt:v=>v==null?'—':fP(v),clr:true},
     {header:'Wtd Res',val:r=>r.wtdResidual,fmt:v=>v==null?'—':fP(v),clr:true}
   ];
-  // Append cumulative row
-  const sum=k=>rows.reduce((a,r)=>a+(r[k]||0),0);
+  // Ligne cumulée : les contributions pondérées sont chaînées (Carino) comme dans les totaux mensuels, les Δ bruts sont sommés
+  const sum=k=>rows.reduce((a,r)=>a+(r[k]||0),0);const sumK=k=>rows.reduce((a,r)=>a+(r[k]||0)*r.carino,0);
   const firstCbT0=rows.find(r=>r.cbT0)?.cbT0||null;
-  const totalRow={date:'Σ Cumulé',cbT0:firstCbT0,cbT1:null,eqT0:null,eqT1:null,spT0:null,spT1:null,
+  const totalRow={date:'Σ Cumulé (Carino)',cbT0:firstCbT0,cbT1:null,eqT0:null,eqT1:null,spT0:null,spT1:null,
     cbPnl:sum('cbPnl'),eqRetPct:null,dSpread:sum('dSpread'),dRate:sum('dRate'),weight:null,
-    wtdTotal:sum('wtdTotal'),wtdEquity:sum('wtdEquity'),wtdGamma:sum('wtdGamma'),wtdCredit:sum('wtdCredit'),wtdVega:sum('wtdVega'),wtdRate:sum('wtdRate'),wtdFX:sum('wtdFX'),wtdResidual:sum('wtdResidual'),isTotal:true};
+    wtdTotal:sumK('wtdTotal'),wtdEquity:sumK('wtdEquity'),wtdGamma:sumK('wtdGamma'),wtdCredit:sumK('wtdCredit'),wtdVega:sumK('wtdVega'),wtdRate:sumK('wtdRate'),wtdCarry:sumK('wtdCarry'),wtdFX:sumK('wtdFX'),wtdResidual:sumK('wtdResidual'),isTotal:true};
   buildTable(document.getElementById('cbDailyTable'),cols,[...rows,totalRow],'cbd',520);
 }
 
@@ -1034,72 +1058,64 @@ multiInput.addEventListener('change',e=>{addMonthlyFiles(e.target.files)});
 document.getElementById('applyPerfM').addEventListener('click',()=>{const v=parseFloat(document.getElementById('realPerfM').value.replace(',','.'));mRealPerf=isNaN(v)?null:v;const st=document.getElementById('perfStatusM');if(mRealPerf!==null){st.classList.remove('hidden');st.textContent='✓ '+fP(mRealPerf)+' bps'}else st.classList.add('hidden');if(mCumData)renderMonthly()});
 document.getElementById('realPerfM').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('applyPerfM').click()});
 document.querySelectorAll('#mTabs .tab').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('#mTabs .tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');mTab=b.dataset.tab;sortSt={};renderMonthlyTab()})});
-document.getElementById('mExportCSV').addEventListener('click',()=>{if(mCumData)exportCSV(mCumData.bonds)});
+document.getElementById('mExportCSV').addEventListener('click',()=>{if(mCumData)exportCSV(mCumData.bonds,false)});
 
 // ═══════════════════════════════════════════════════════════════════════
-// EXCEL EXPORT (monthly)
+// EXPORTS (Excel journalier & mensuel, CSV) — builders partagés
 // ═══════════════════════════════════════════════════════════════════════
-document.getElementById('mExportXL').addEventListener('click',()=>{
-  if(!mCumData)return;const daily=mCumData.daily;const bonds=mCumData.bonds;
-  const wb=XLSX.utils.book_new();
-
-  // Sheet 1: Summary
-  const t={wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdRate:0,wtdFX:0,wtdResidual:0};
-  daily.forEach(d=>{const k=d.carino||1;t.wtdTotal+=k*d.wtdTotal;t.wtdEquity+=k*d.wtdEquity;t.wtdGamma+=k*d.wtdGamma;t.wtdCredit+=k*d.wtdCredit;t.wtdVega+=k*d.wtdVega;t.wtdRate+=k*(d.wtdRate||0);t.wtdFX+=k*(d.wtdFX||0);t.wtdResidual+=k*d.wtdResidual});
-  const sumRows=[['PnL Attribution — Récap Mensuel'],[`Période: ${mCumData.dates[0]} → ${mCumData.dates[mCumData.dates.length-1]}`],['Contributions chaînées géométriquement (Carino)'],[],
-    ['Facteur','Contribution (bps)'],['Equity / Delta',t.wtdEquity*100],['Gamma',t.wtdGamma*100],['Crédit / Spread',t.wtdCredit*100],
-    ['Vega / Vol',t.wtdVega*100],['Taux ('+(rateSens==='rho'?'Rho 10bp':'Duration')+')',t.wtdRate*100],['FX',t.wtdFX*100],['Résiduel (Theta+Autre)',t.wtdResidual*100],['Total Théorique (composé)',t.wtdTotal*100]];
-  if(mRealPerf!==null){sumRows.push([],['Performance Réelle',mRealPerf*100],['Écart',(mRealPerf-t.wtdTotal)*100])}
-  const ws1=XLSX.utils.aoa_to_sheet(sumRows);XLSX.utils.book_append_sheet(wb,ws1,'Résumé');
-
-  // Sheet 2: Daily
-  const dRows=[['Date','Total(bps)','Equity(bps)','Gamma(bps)','Crédit(bps)','Vega(bps)','Taux(bps)','FX(bps)','Résiduel(bps)','#Bonds','Sortants non couverts(%)','Positifs','Négatifs']];
-  daily.forEach(d=>dRows.push([d.date,d.wtdTotal*100,d.wtdEquity*100,d.wtdGamma*100,d.wtdCredit*100,d.wtdVega*100,(d.wtdRate||0)*100,(d.wtdFX||0)*100,d.wtdResidual*100,d.nBonds,d.leftUncovered||0,d.nPos,d.nNeg]));
-  const ws2=XLSX.utils.aoa_to_sheet(dRows);XLSX.utils.book_append_sheet(wb,ws2,'Jour par Jour');
-
-  // Sheet 2b: Δ taux utilisés par jour et par devise
-  const ccyAll=ccysOf(bonds);
-  const tRows=[['Date',...ccyAll.map(c=>'Δ'+c+'(bp)'),'Couverture(% poids)']];
+const LEG_HDR=['Total(bps)','Equity(bps)','Gamma(bps)','Crédit(bps)','Vega(bps)','Taux(bps)','Carry(bps)','FX(bps)','Résiduel(bps)'];
+const legVals=r=>LEGS.map(k=>(r[k]||0)*100);
+const num0=v=>(v==null||isNaN(v))?'':v;
+function legSummaryRows(t,realPerf){
+  const rows=[['Facteur','Contribution (bps)'],['Equity / Delta',t.wtdEquity*100],['Gamma',t.wtdGamma*100],['Crédit / Spread',t.wtdCredit*100],['Vega / Vol',t.wtdVega*100],
+    ['Taux ('+(rateSens==='rho'?'Rho 10bp':'Duration')+')',t.wtdRate*100],['Carry (coupon couru)',t.wtdCarry*100],['FX',t.wtdFX*100],['Résiduel (Theta/convexité/autre)',t.wtdResidual*100],['Total Théorique',t.wtdTotal*100]];
+  if(realPerf!=null)rows.push([],['Performance Réelle',realPerf*100],['Écart',(realPerf-t.wtdTotal)*100]);
+  return rows;}
+function appendGroupSheets(wb,bonds,wLabel){
+  const sRows=[['Secteur',wLabel,'#',...LEG_HDR]];groupBy(bonds,'sector').forEach(r=>sRows.push([r.name,r.weight,r.count,...legVals(r)]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sRows),'Par Secteur');
+  const rRows=[['Région',wLabel,'#',...LEG_HDR]];groupBy(bonds,'region').forEach(r=>rRows.push([r.name,r.weight,r.count,...legVals(r)]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rRows),'Par Région');
+  const iRows=[['Émetteur','Secteur','Région','Devise',wLabel,'#Bonds','Obligations',...LEG_HDR]];groupByIssuer(bonds).forEach(r=>iRows.push([r.name,r.sector,r.region,r.bondCcy,r.weight,r.count,r.bonds.join(', '),...legVals(r)]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(iRows),'Par Émetteur');}
+// Détail obligations : en journalier, les variables brutes (prix, Δ) sont disponibles ; en mensuel seule la somme des ΔCB l'est.
+function bondDetailRows(results,daily){
+  const raw=daily?['CB t0','CB t1','ΔCB','Eq%','Parité%','ΔSpread(bp)','ΔVol(pt)','ΔTaux(bp)','Jours']:['ΣΔcb'];
+  const rows=[['Issue','ISIN','Secteur','Région','Devise',daily?'Poids(%)':'Poids Moy(%)',...raw,...LEG_HDR.map(h=>'Wtd '+h)]];
+  [...results].sort((a,b)=>b.wtdTotal-a.wtdTotal).forEach(r=>rows.push([bondLabel(r),r.isin,r.sector,r.region,r.bondCcy,num0(r.weight),
+    ...(daily?[num0(r.cbPrice),num0(r.cbPrice_t1),num0(r.cbPnl),num0(r.eqRetPct),num0(r.parityRetPct),num0(r.spreadChange),num0(r.volChange),num0(r.rateChange),num0(r.days)]:[num0(r.cbPnl)]),...legVals(r)]));
+  return rows;}
+function exportDailyXL(){
+  if(!dData)return;const wb=XLSX.utils.book_new();const t=sumResults(dData.results);
+  const sum=[['PnL Attribution — Journalier'],[`Période: ${dDates.t0||'?'} → ${dDates.t1||'?'}`],[`${t.nBonds} obligations`+(dData.leftUncovered>0.005?` — sortants non couverts: ${dData.leftUncovered.toFixed(2)}%`:'')],[],...legSummaryRows(t,dRealPerf)];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sum),'Résumé');
+  appendGroupSheets(wb,dData.results,'Poids(%)');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(bondDetailRows(dData.results,true)),'Détail Obligations');
+  const rm=dailyRateMoves();const tRows=[['Devise','Δ taux (bp)']];Object.keys(rm).sort().forEach(c=>tRows.push([c,rm[c]]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(tRows),'Taux');
+  XLSX.writeFile(wb,`PnL_Attribution_${(dDates.t0||'T0').replace(/-/g,'')}_${(dDates.t1||'T1').replace(/-/g,'')}.xlsx`);}
+function exportMonthlyXL(){
+  if(!mCumData)return;const daily=mCumData.daily;const bonds=mCumData.bonds;const wb=XLSX.utils.book_new();const t=monthlyTotals(daily);
+  const sum=[['PnL Attribution — Récap Mensuel'],[`Période: ${mCumData.dates[0]} → ${mCumData.dates[mCumData.dates.length-1]}`],['Contributions chaînées géométriquement (Carino)'],[],...legSummaryRows(t,mRealPerf)];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sum),'Résumé');
+  const dRows=[['Date',...LEG_HDR,'#Bonds','Sortants non couverts(%)','Positifs','Négatifs']];
+  daily.forEach(d=>dRows.push([d.date,...legVals(d),d.nBonds,d.leftUncovered||0,d.nPos,d.nNeg]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(dRows),'Jour par Jour');
+  const ccyAll=ccysOf(bonds);const tRows=[['Date',...ccyAll.map(c=>'Δ'+c+'(bp)'),'Couverture(% poids)']];
   daily.forEach(d=>tRows.push([d.date,...ccyAll.map(c=>(d.rateMoves&&d.rateMoves[c]!=null)?d.rateMoves[c]:''),d.rateCov!=null?d.rateCov:'']));
-  const wsT=XLSX.utils.aoa_to_sheet(tRows);XLSX.utils.book_append_sheet(wb,wsT,'Taux');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(tRows),'Taux');
+  appendGroupSheets(wb,bonds,'Poids Moy(%)');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(bondDetailRows(bonds,false)),'Détail Obligations');
+  XLSX.writeFile(wb,'PnL_Attribution_Monthly.xlsx');}
+document.getElementById('mExportXL').addEventListener('click',exportMonthlyXL);
+document.getElementById('dExportXL').addEventListener('click',exportDailyXL);
 
-  // Sheet 3: Sector
-  const secData=groupBy(bonds,'sector');
-  const sRows=[['Secteur','Poids(%)','#','Total(bps)','Equity(bps)','Gamma(bps)','Crédit(bps)','Vega(bps)','Taux(bps)','FX(bps)','Résiduel(bps)']];
-  secData.forEach(r=>sRows.push([r.name,r.weight,r.count,r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,(r.wtdRate||0)*100,(r.wtdFX||0)*100,r.wtdResidual*100]));
-  const ws3=XLSX.utils.aoa_to_sheet(sRows);XLSX.utils.book_append_sheet(wb,ws3,'Par Secteur');
-
-  // Sheet 4: Region
-  const regData=groupBy(bonds,'region');
-  const rRows=[['Région','Poids(%)','#','Total(bps)','Equity(bps)','Gamma(bps)','Crédit(bps)','Vega(bps)','Taux(bps)','FX(bps)','Résiduel(bps)']];
-  regData.forEach(r=>rRows.push([r.name,r.weight,r.count,r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,(r.wtdRate||0)*100,(r.wtdFX||0)*100,r.wtdResidual*100]));
-  const ws4=XLSX.utils.aoa_to_sheet(rRows);XLSX.utils.book_append_sheet(wb,ws4,'Par Région');
-
-  // Sheet 5: Issuer
-  const issData=groupByIssuer(bonds);
-  const iRows=[['Émetteur','Secteur','Région','Devise','Poids Moy(%)','#Bonds','Obligations','Total(bps)','Equity(bps)','Gamma(bps)','Crédit(bps)','Vega(bps)','Taux(bps)','FX(bps)','Résiduel(bps)']];
-  issData.forEach(r=>iRows.push([r.name,r.sector,r.region,r.bondCcy,r.weight,r.count,r.bonds.join(', '),r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,(r.wtdRate||0)*100,(r.wtdFX||0)*100,r.wtdResidual*100]));
-  const ws5b=XLSX.utils.aoa_to_sheet(iRows);XLSX.utils.book_append_sheet(wb,ws5b,'Par Émetteur');
-
-  // Sheet 6: Bond detail
-  const bSorted=[...bonds].sort((a,b)=>b.wtdTotal-a.wtdTotal);
-  const bRows=[['Issue','ISIN','Secteur','Région','Devise','Poids Moy(%)','ΣΔcb','Wtd Total(bps)','Wtd Equity(bps)','Wtd Gamma(bps)','Wtd Crédit(bps)','Wtd Vega(bps)','Wtd Taux(bps)','Wtd FX(bps)','Wtd Résiduel(bps)']];
-  bSorted.forEach(r=>bRows.push([bondLabel(r),r.isin,r.sector,r.region,r.bondCcy,r.weight,r.cbPnl,r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,(r.wtdRate||0)*100,(r.wtdFX||0)*100,r.wtdResidual*100]));
-  const ws5=XLSX.utils.aoa_to_sheet(bRows);XLSX.utils.book_append_sheet(wb,ws5,'Détail Obligations');
-
-  XLSX.writeFile(wb,'PnL_Attribution_Monthly.xlsx');
-});
-
-// ═══════════════════════════════════════════════════════════════════════
-// CSV EXPORT
-// ═══════════════════════════════════════════════════════════════════════
-function exportCSV(results){
-  const h=['Issue','ISIN','Sector','Region','Currency','Weight(%)',
-    'Wtd_Total(bps)','Wtd_Equity(bps)','Wtd_Gamma(bps)','Wtd_Credit(bps)','Wtd_Vega(bps)','Wtd_Rate(bps)','Wtd_FX(bps)','Wtd_Residual(bps)'];
-  const rows=results.map(r=>[bondLabel(r),r.isin,r.sector,r.region,r.bondCcy,r.weight,r.wtdTotal*100,r.wtdEquity*100,r.wtdGamma*100,r.wtdCredit*100,r.wtdVega*100,(r.wtdRate||0)*100,(r.wtdFX||0)*100,r.wtdResidual*100]);
-  const csv=[h.join(';'),...rows.map(r=>r.map(v=>typeof v==='string'&&(v.includes(';')||v.includes('"'))?'"'+v.replace(/"/g,'""')+'"':v).join(';'))].join('\n');
+function exportCSV(results,daily){
+  const rows=bondDetailRows(results,daily);
+  const cell=v=>{if(v==null)return'';if(typeof v==='number')return String(v);const x=String(v);return/[;"\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x};
+  const csv=rows.map(r=>r.map(cell).join(';')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='pnl_attribution.csv';a.click();URL.revokeObjectURL(url);}
+  const a=document.createElement('a');a.href=url;a.download=daily?'pnl_attribution_daily.csv':'pnl_attribution_monthly.csv';a.click();URL.revokeObjectURL(url);}
 
 // ═══════════════════════════════════════════════════════════════════════
 // TAUX — saisie partagée (les deux textareas et les deux sélecteurs sont synchronisés)
