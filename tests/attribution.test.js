@@ -62,6 +62,12 @@ assert.strictEqual(r.USD.days,1,'jours');
 near(r.USD.rateContrib,0,1e-12,'taux vide');
 // Tableau de niveaux : USD −8bp, EUR +5bp, JPY absent
 await page.evaluate(()=>{document.getElementById('ratesBoxD').open=true;document.getElementById('ratesBoxM').open=true});
+// Tableau clairsemé (début/fin) : interpolation linéaire → 08-31→09-01 reçoit la moitié de 08-31→09-02 ; format CSV virgule
+await page.fill('#rateLevelsD','Date,USD,EUR\n2026-08-31,4.18,3.20\n2026-09-02,4.80,3.60');
+r=await byCcy();near(r.USD.rateChange,31,1e-9,'interpolation USD');near(r.EUR.rateChange,20,1e-9,'interpolation EUR');
+// Tableau ne couvrant pas T1 : niveau plat au-delà, et avertissement
+await page.fill('#rateLevelsD','Date\tUSD\n2026-08-20\t4.18\n2026-08-31\t4.80');
+r=await byCcy();near(r.USD.rateChange,0,1e-9,'plat hors tableau');assert.ok((await page.textContent('#rateStatusD')).includes('hors tableau'),'avertissement hors tableau');
 await page.fill('#rateLevelsD','Date\tUSD\tEUR\n2026-08-31\t3.62\t2.31\n2026-09-01\t3.54\t2.36\n2026-09-02\t3.60\t2.30');
 r=await byCcy();
 near(r.USD.rateContrib,-3.5*-8/100,1e-9,'taux duration USD');near(r.EUR.rateContrib,-2.8*5/100,1e-9,'taux duration EUR');near(r.JPY.rateContrib,0,1e-12,'taux JPY absent');
@@ -100,6 +106,15 @@ await page.waitForFunction(()=>typeof mCumData!=='undefined'&&mCumData);
 const m=await page.evaluate(()=>({daily:mDailyAttr.map(d=>({date:d.date,rm:d.rateMoves,cov:d.rateCov,carino:d.carino,...LEGS.reduce((o,k)=>(o[k]=d[k],o),{})})),t:monthlyTotals(mDailyAttr),bonds:mCumData.bonds}));
 assert.strictEqual(m.daily.length,2,'2 jours');
 near(m.daily[1].rm.USD,6,1e-9,'Δ taux jour 2 USD');near(m.daily[0].cov,75,1e-9,'couverture 75 %');
+assert.ok((await page.textContent('#rateStatusM')).includes('Δ sur la période 2026-08-31 → 2026-09-02 : EUR -1.0bp, USD -2.0bp'),'statut Δ période : '+await page.textContent('#rateStatusM'));
+// Tableau à deux lignes (type swap 5 ans début/fin de mois) : Σ Δ quotidiens = Δ période, réparti uniformément
+await page.fill('#rateLevelsM','Date,USD,EUR,JPY\n2026-08-31,4.18,3.20,2.29\n2026-09-02,4.80,3.60,2.45');
+await page.waitForFunction(()=>mDailyAttr[0].rateMoves.JPY!=null);
+const sparse=await page.evaluate(()=>mDailyAttr.map(d=>d.rateMoves));
+for(const c of['USD','EUR','JPY']){const tot=sparse.reduce((a,d)=>a+d[c],0);near(tot,{USD:62,EUR:40,JPY:16}[c],1e-9,'Δ période '+c);near(sparse[0][c],sparse[1][c],1e-9,'répartition uniforme '+c)}
+const mt=await page.evaluate(()=>monthlyTotals(mDailyAttr));assert.ok(Math.abs(mt.wtdRate)>0.05,'contribution taux non nulle avec tableau clairsemé : '+mt.wtdRate);
+await page.fill('#rateLevelsM','Date\tUSD\tEUR\n2026-08-31\t3.62\t2.31\n2026-09-01\t3.54\t2.36\n2026-09-02\t3.60\t2.30');
+await page.waitForFunction(()=>mDailyAttr[0].rateMoves.JPY==null);
 // Carino : Σ k_j r_j = Π(1+r_j) − 1, et chaque jambe somme au total
 const R=m.daily.reduce((p,d)=>p*(1+d.wtdTotal/100),1)-1;
 near(m.t.wtdTotal,R*100,1e-9,'total composé');

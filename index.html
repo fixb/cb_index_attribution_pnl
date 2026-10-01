@@ -193,7 +193,7 @@
     <div class="perf-input-row"><label>Perf réelle (en %) :</label><input type="text" id="realPerfD" placeholder="-0.48"><span class="unit">%</span><button class="apply-btn" id="applyPerfD">Appliquer</button><span class="perf-status hidden" id="perfStatusD"></span></div>
     <details class="rates-box" id="ratesBoxD"><summary>📈 Taux d'intérêt <span class="rates-status" id="rateStatusD">non renseignés — contribution taux = 0 (reste dans le résiduel)</span></summary>
       <div class="rates-body">
-        <div class="rates-row"><label>Sensibilité :</label><select class="rate-sens" id="rateSensD"><option value="duration">Duration × Δtaux</option><option value="rho">Rho (10bp) × Δtaux / 10</option></select><span class="rates-note">Variation du taux sans risque (ex. swap 5 ans) par devise entre T₀ et T₁, en bp. Pré-remplie depuis le tableau de niveaux si les dates y figurent ; modifiable à la main.</span></div>
+        <div class="rates-row"><label>Sensibilité :</label><select class="rate-sens" id="rateSensD"><option value="duration">Duration × Δtaux</option><option value="rho">Rho (10bp) × Δtaux / 10</option></select><span class="rates-note">Variation du taux sans risque (ex. swap 5 ans) par devise entre T₀ et T₁, en bp. Pré-remplie depuis le tableau de niveaux (interpolation linéaire entre ses dates) ; modifiable à la main.</span></div>
         <div class="rates-row" id="rateCcyRowD"><span class="rates-note">Chargez le fichier T₀ pour lister les devises de l'index.</span></div>
         <div class="rates-note">Tableau de niveaux (optionnel, partagé avec le récap mensuel) — collez depuis Excel : 1ʳᵉ ligne <code>Date</code> puis codes devises (USD, EUR, JPY…), niveaux en %.</div>
         <textarea class="rate-levels" id="rateLevelsD" placeholder="Date&#9;USD&#9;EUR&#9;JPY&#10;2026-08-31&#9;3.62&#9;2.31&#9;1.05&#10;2026-09-01&#9;3.58&#9;2.29&#9;1.06"></textarea>
@@ -225,7 +225,7 @@
     <div class="perf-input-row"><label>Perf réelle du mois (en %) :</label><input type="text" id="realPerfM" placeholder="-1.25"><span class="unit">%</span><button class="apply-btn" id="applyPerfM">Appliquer</button><span class="perf-status hidden" id="perfStatusM"></span></div>
     <details class="rates-box" id="ratesBoxM"><summary>📈 Taux d'intérêt <span class="rates-status" id="rateStatusM">non renseignés — contribution taux = 0 (reste dans le résiduel)</span></summary>
       <div class="rates-body">
-        <div class="rates-row"><label>Sensibilité :</label><select class="rate-sens" id="rateSensM"><option value="duration">Duration × Δtaux</option><option value="rho">Rho (10bp) × Δtaux / 10</option></select><span class="rates-note">Le Δ taux de chaque jour est lu dans le tableau de niveaux (dernier niveau connu ≤ date). Devise sans niveau → contribution taux nulle pour ses obligations.</span></div>
+        <div class="rates-row"><label>Sensibilité :</label><select class="rate-sens" id="rateSensM"><option value="duration">Duration × Δtaux</option><option value="rho">Rho (10bp) × Δtaux / 10</option></select><span class="rates-note">Le Δ taux de chaque jour est lu dans le tableau de niveaux, interpolé linéairement entre ses dates : deux lignes (début et fin de période) suffisent, le mouvement est alors réparti uniformément. Le tableau doit couvrir la date du premier et du dernier fichier. Devise sans niveau → contribution taux nulle pour ses obligations.</span></div>
         <div class="rates-note">Niveaux de taux sans risque par devise (ex. swap 5 ans) — collez depuis Excel : 1ʳᵉ ligne <code>Date</code> puis codes devises (USD, EUR, JPY…), niveaux en %. Dates au format AAAA-MM-JJ, JJ/MM/AAAA ou AAAAMMJJ.</div>
         <textarea class="rate-levels" id="rateLevelsM" placeholder="Date&#9;USD&#9;EUR&#9;JPY&#10;2026-08-31&#9;3.62&#9;2.31&#9;1.05&#10;2026-09-01&#9;3.58&#9;2.29&#9;1.06"></textarea>
       </div>
@@ -270,7 +270,7 @@
       <strong>Gamma</strong> = ½ × Gamma × Parity(t0) × (ΔParité/Parité)² / CB₀, avec Gamma = variation du delta (points) pour +1 % de parité<br>
       <strong>Crédit/Spread</strong> = Rho(10bp) × (ΔSpread / 10) / CB₀<br>
       <strong>Vega/Vol</strong> = Vega × ΔImplied Vol / CB₀<br>
-      <strong>Taux</strong> = −Duration × Δr (défaut) ou Rho(10bp) × (Δr / 10) / CB₀, avec Δr = variation du taux sans risque de la devise de l'obligation (bp) saisie par l'utilisateur ou déduite du tableau de niveaux ; sans donnée taux, la contribution est nulle et reste dans le résiduel<br>
+      <strong>Taux</strong> = −Duration × Δr (défaut) ou Rho(10bp) × (Δr / 10) / CB₀, avec Δr = variation du taux sans risque de la devise de l'obligation (bp) saisie par l'utilisateur ou déduite du tableau de niveaux (interpolation linéaire entre les dates du tableau, plat au-delà) ; sans donnée taux, la contribution est nulle et reste dans le résiduel<br>
       <strong>Carry</strong> = Coupon × jours calendaires / 365 / CB₀ (coupon couru, ACT/365 ; les dates sont lues dans les noms de fichiers AAAAMMJJ)<br>
       <strong>FX</strong> = variation de change devise → devise index, déduite par devise de la médiane des ratios (ΔMarket Cap USD / ΔPrix) des titres communs<br>
       <strong>Résiduel</strong> = Rendement CB − (Equity + Gamma + Crédit + Vega + Taux + Carry + FX) : theta de l'option, convexité crédit/taux, termes croisés, ajustements de ratio<br>
@@ -324,16 +324,27 @@ function parseDateAny(v){
 function parseRateLevels(text){
   const out={};const lines=String(text||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);let hdr=null;
   for(const l of lines){
-    const delim=l.includes('\t')?'\t':l.includes(';')?';':(l.includes(',')&&/\d\.\d/.test(l))?',':/\s+/;
+    // Séparateur : tabulation (collage Excel), point-virgule, virgule (CSV), sinon espaces
+    const delim=l.includes('\t')?'\t':l.includes(';')?';':l.includes(',')?',':/\s+/;
     const tok=l.split(delim).map(t=>t.trim());
     if(!hdr){if(tok.some(t=>/^[A-Za-z]{3}$/.test(t)))hdr=tok.map(t=>t.toUpperCase());continue}
     const d=parseDateAny(tok[0]);if(!d)continue;
     hdr.forEach((h,i)=>{if(i===0||!/^[A-Z]{3}$/.test(h))return;const x=parseFloat(String(tok[i]??'').replace(',','.'));if(isNaN(x))return;(out[h]=out[h]||[]).push({date:d,v:x})});}
   Object.values(out).forEach(a=>a.sort((x,y)=>x.date<y.date?-1:x.date>y.date?1:0));
   return out;}
-// Dernier niveau connu ≤ date (tolère jours fériés / dates manquantes)
-function rateLevelAt(ccy,date){const a=rateLevels[ccy];if(!a||!date)return null;let r=null;for(const p of a){if(p.date<=date)r=p.v;else break}return r}
+// Niveau à une date : interpolation linéaire entre les points du tableau (un tableau début/fin de mois suffit,
+// le mouvement est alors réparti uniformément sur les jours) ; plat avant le premier point et après le dernier.
+function rateLevelAt(ccy,date){const a=rateLevels[ccy];if(!a||!a.length||!date)return null;
+  if(date<=a[0].date)return a[0].v;const last=a[a.length-1];if(date>=last.date)return last.v;
+  for(let i=1;i<a.length;i++){if(a[i].date>=date){const p=a[i-1],q=a[i];if(q.date===p.date)return q.v;
+    const t=(Date.parse(date)-Date.parse(p.date))/(Date.parse(q.date)-Date.parse(p.date));return p.v+(q.v-p.v)*t}}
+  return last.v}
 function rateMoveBp(ccy,d0,d1){const a=rateLevelAt(ccy,d0),b=rateLevelAt(ccy,d1);return(a==null||b==null)?null:(b-a)*100}
+// Devises dont le tableau ne couvre pas [d0,d1] : au-delà des bornes le niveau est plat, donc le mouvement y est perdu
+function rateRangeGaps(ccys,d0,d1){const out=[];ccys.forEach(c=>{const a=rateLevels[c];if(!a||!a.length||!d0||!d1)return;
+  const lo=a[0].date,hi=a[a.length-1].date;if(d0<lo||d1>hi)out.push(c+' ('+lo+' → '+hi+')')});return out}
+// Δ total (bp) par devise entre deux dates, pour l'affichage du statut
+function ratePeriodMoves(ccys,d0,d1){return ccys.map(c=>{const m=rateMoveBp(c,d0,d1);return m==null?null:c+' '+fS(m,1)+'bp'}).filter(Boolean).join(', ')}
 function rateMovesFor(ccys,d0,d1){const o={};ccys.forEach(c=>{const m=rateMoveBp(c,d0,d1);if(m!=null)o[c]=m});return o}
 function ccysOf(bonds){return[...new Set((bonds||[]).map(b=>(b.bondCcy||'').trim()).filter(Boolean))].sort()}
 // % du poids de l'index dont la devise dispose d'un Δ taux
@@ -653,7 +664,8 @@ function updateRateStatusD(){
   if(!bondsT0){setRateStatus('rateStatusD','non renseignés — contribution taux = 0 (reste dans le résiduel)','');return}
   const rm=dailyRateMoves();const cov=rateCoverage(bondsT0,rm);const miss=ccysOf(bondsT0).filter(c=>rm[c]==null);
   if(!Object.keys(rm).length)setRateStatus('rateStatusD','non renseignés — contribution taux = 0 (reste dans le résiduel)','warn');
-  else setRateStatus('rateStatusD',(rateSens==='rho'?'Rho (10bp)':'Duration')+' · '+Object.keys(rm).map(c=>c+' '+fS(rm[c],1)+'bp').join(', ')+' · couverture '+cov.toFixed(1)+'% du poids'+(miss.length?' — sans donnée : '+miss.join(', '):''),miss.length?'warn':'ok');}
+  else{const gaps=rateRangeGaps(Object.keys(rm).filter(c=>dRateOverride[c]==null),dDates.t0,dDates.t1);
+    setRateStatus('rateStatusD',(rateSens==='rho'?'Rho (10bp)':'Duration')+' · '+Object.keys(rm).map(c=>c+' '+fS(rm[c],1)+'bp').join(', ')+' · couverture '+cov.toFixed(1)+'% du poids'+(miss.length?' — sans donnée : '+miss.join(', '):'')+(gaps.length?' — ⚠ dates hors tableau, niveau supposé plat : '+gaps.join(', '):''),(miss.length||gaps.length)?'warn':'ok')}}
 function recomputeDaily(){updateRateStatusD();if(bondsT0&&bondsT1){dData=computeAttr(bondsT0,bondsT1,bondsAux,dailyRateMoves(),dDates.t0,dDates.t1);renderDaily()}}
 
 document.getElementById('applyPerfD').addEventListener('click',()=>{const v=parseFloat(document.getElementById('realPerfD').value.replace(',','.'));dRealPerf=isNaN(v)?null:v;const st=document.getElementById('perfStatusD');if(dRealPerf!==null){st.classList.remove('hidden');st.textContent='✓ '+fP(dRealPerf)+' bps'}else st.classList.add('hidden');if(dData)renderDaily()});
@@ -1126,7 +1138,8 @@ function updateRateStatusM(){
   if(!nd){setRateStatus('rateStatusM','non renseignés — contribution taux = 0 (reste dans le résiduel)','warn');return}
   const ccys=ccysOf(Object.values(mBonds).flat());const covered=ccys.filter(c=>mDailyAttr.some(d=>d.rateMoves&&d.rateMoves[c]!=null));const miss=ccys.filter(c=>!covered.includes(c));
   const avgCov=mDailyAttr.reduce((a,d)=>a+(d.rateCov||0),0)/mDailyAttr.length;
-  setRateStatus('rateStatusM',(rateSens==='rho'?'Rho (10bp)':'Duration')+' · '+nd+'/'+mDailyAttr.length+' jours avec Δ taux · devises : '+covered.join(', ')+' · couverture moy. '+avgCov.toFixed(1)+'% du poids'+(miss.length?' — sans donnée : '+miss.join(', '):''),(miss.length||nd<mDailyAttr.length)?'warn':'ok');}
+  const d0=mDailyAttr[0].from,d1=mDailyAttr[mDailyAttr.length-1].date;const gaps=rateRangeGaps(covered,d0,d1);
+  setRateStatus('rateStatusM',(rateSens==='rho'?'Rho (10bp)':'Duration')+' · Δ sur la période '+d0+' → '+d1+' : '+ratePeriodMoves(covered,d0,d1)+' · '+nd+'/'+mDailyAttr.length+' jours · couverture moy. '+avgCov.toFixed(1)+'% du poids'+(miss.length?' — sans donnée : '+miss.join(', '):'')+(gaps.length?' — ⚠ tableau ne couvrant pas toute la période, niveau supposé plat au-delà : '+gaps.join(', '):''),(miss.length||nd<mDailyAttr.length||gaps.length)?'warn':'ok');}
 function recomputeAll(){if(bondsT0)renderRateCcyRow();recomputeDaily();if(Object.keys(mBonds).length>=2)computeMonthly();else updateRateStatusM();}
 function onRateLevelsInput(src){
   const txt=src.value;document.querySelectorAll('textarea.rate-levels').forEach(t=>{if(t!==src)t.value=txt});
