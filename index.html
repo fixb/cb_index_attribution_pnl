@@ -193,7 +193,7 @@
     <div class="perf-input-row"><label>Perf réelle (en %) :</label><input type="text" id="realPerfD" placeholder="-0.48"><span class="unit">%</span><button class="apply-btn" id="applyPerfD">Appliquer</button><span class="perf-status hidden" id="perfStatusD"></span></div>
     <details class="rates-box" id="ratesBoxD"><summary>📈 Taux d'intérêt <span class="rates-status" id="rateStatusD">non renseignés — contribution taux = 0 (reste dans le résiduel)</span></summary>
       <div class="rates-body">
-        <div class="rates-row"><label>Sensibilité :</label><select class="rate-sens" id="rateSensD"><option value="duration">Duration × Δtaux</option><option value="rho">Rho (10bp) × Δtaux / 10</option></select><span class="rates-note">Variation du taux sans risque (ex. swap 5 ans) par devise entre T₀ et T₁, en bp. Pré-remplie depuis le tableau de niveaux (interpolation linéaire entre ses dates) ; modifiable à la main.</span></div>
+        <div class="rates-row"><label>Sensibilité :</label><select class="rate-sens" id="rateSensD"><option value="cbdur">Duration ajustée CB : D × (1−Δ) × Plancher/Prix × Δtaux</option><option value="duration">Duration brute × Δtaux (obligation sèche)</option><option value="rho">Rho (10bp) × Δtaux / 10</option></select><span class="rates-note">Variation du taux sans risque (ex. swap 5 ans) par devise entre T₀ et T₁, en bp. Pré-remplie depuis le tableau de niveaux (interpolation linéaire entre ses dates) ; modifiable à la main.</span></div>
         <div class="rates-row" id="rateCcyRowD"><span class="rates-note">Chargez le fichier T₀ pour lister les devises de l'index.</span></div>
         <div class="rates-note">Tableau de niveaux (optionnel, partagé avec le récap mensuel) — collez depuis Excel : 1ʳᵉ ligne <code>Date</code> puis codes devises (USD, EUR, JPY…), niveaux en %.</div>
         <textarea class="rate-levels" id="rateLevelsD" placeholder="Date&#9;USD&#9;EUR&#9;JPY&#10;2026-08-31&#9;3.62&#9;2.31&#9;1.05&#10;2026-09-01&#9;3.58&#9;2.29&#9;1.06"></textarea>
@@ -225,7 +225,7 @@
     <div class="perf-input-row"><label>Perf réelle du mois (en %) :</label><input type="text" id="realPerfM" placeholder="-1.25"><span class="unit">%</span><button class="apply-btn" id="applyPerfM">Appliquer</button><span class="perf-status hidden" id="perfStatusM"></span></div>
     <details class="rates-box" id="ratesBoxM"><summary>📈 Taux d'intérêt <span class="rates-status" id="rateStatusM">non renseignés — contribution taux = 0 (reste dans le résiduel)</span></summary>
       <div class="rates-body">
-        <div class="rates-row"><label>Sensibilité :</label><select class="rate-sens" id="rateSensM"><option value="duration">Duration × Δtaux</option><option value="rho">Rho (10bp) × Δtaux / 10</option></select><span class="rates-note">Le Δ taux de chaque jour est lu dans le tableau de niveaux, interpolé linéairement entre ses dates : deux lignes (début et fin de période) suffisent, le mouvement est alors réparti uniformément. Le tableau doit couvrir la date du premier et du dernier fichier. Devise sans niveau → contribution taux nulle pour ses obligations.</span></div>
+        <div class="rates-row"><label>Sensibilité :</label><select class="rate-sens" id="rateSensM"><option value="cbdur">Duration ajustée CB : D × (1−Δ) × Plancher/Prix × Δtaux</option><option value="duration">Duration brute × Δtaux (obligation sèche)</option><option value="rho">Rho (10bp) × Δtaux / 10</option></select><span class="rates-note">Le Δ taux de chaque jour est lu dans le tableau de niveaux, interpolé linéairement entre ses dates : deux lignes (début et fin de période) suffisent, le mouvement est alors réparti uniformément. Le tableau doit couvrir la date du premier et du dernier fichier. Devise sans niveau → contribution taux nulle pour ses obligations.</span></div>
         <div class="rates-note">Niveaux de taux sans risque par devise (ex. swap 5 ans) — collez depuis Excel : 1ʳᵉ ligne <code>Date</code> puis codes devises (USD, EUR, JPY…), niveaux en %. Dates au format AAAA-MM-JJ, JJ/MM/AAAA ou AAAAMMJJ.</div>
         <textarea class="rate-levels" id="rateLevelsM" placeholder="Date&#9;USD&#9;EUR&#9;JPY&#10;2026-08-31&#9;3.62&#9;2.31&#9;1.05&#10;2026-09-01&#9;3.58&#9;2.29&#9;1.06"></textarea>
       </div>
@@ -270,7 +270,7 @@
       <strong>Gamma</strong> = ½ × Gamma × Parity(t0) × (ΔParité/Parité)² / CB₀, avec Gamma = variation du delta (points) pour +1 % de parité<br>
       <strong>Crédit/Spread</strong> = Rho(10bp) × (ΔSpread / 10) / CB₀<br>
       <strong>Vega/Vol</strong> = Vega × ΔImplied Vol / CB₀<br>
-      <strong>Taux</strong> = −Duration × Δr (défaut) ou Rho(10bp) × (Δr / 10) / CB₀, avec Δr = variation du taux sans risque de la devise de l'obligation (bp) saisie par l'utilisateur ou déduite du tableau de niveaux (interpolation linéaire entre les dates du tableau, plat au-delà) ; sans donnée taux, la contribution est nulle et reste dans le résiduel<br>
+      <strong>Taux</strong> = −D<sub>CB</sub> × Δr (défaut), avec D<sub>CB</sub> = Duration × (1 − Delta/100) × min(1, Plancher/CB₀) : seule la part obligataire de la CB réagit aux taux, l'option d'échange compensant à hauteur du delta. Plancher = coupons annuels + pair actualisés au taux sans risque de la devise (tableau de niveaux, 3 % par défaut) + Credit Spread ; sans maturité exploitable, ratio = 1. Variantes : −Duration × Δr (duration brute, obligation sèche — surestime l'effet taux d'une CB) ou Rho(10bp) × (Δr / 10) / CB₀. HKD sans niveau propre : Δ de l'USD (peg). Δr = variation du taux sans risque de la devise de l'obligation (bp) saisie par l'utilisateur ou déduite du tableau de niveaux (interpolation linéaire entre les dates du tableau, plat au-delà) ; sans donnée taux, la contribution est nulle et reste dans le résiduel<br>
       <strong>Carry</strong> = Coupon × jours calendaires / 365 / CB₀ (coupon couru, ACT/365 ; les dates sont lues dans les noms de fichiers AAAAMMJJ)<br>
       <strong>FX</strong> = variation de change devise → devise index, déduite par devise de la médiane des ratios (ΔMarket Cap USD / ΔPrix) des titres communs<br>
       <strong>Résiduel</strong> = Rendement CB − (Equity + Gamma + Crédit + Vega + Taux + Carry + FX) : theta de l'option, convexité crédit/taux, termes croisés, ajustements de ratio<br>
@@ -313,7 +313,7 @@ function parseIndexFile(buffer,fileName){
 // ───────── TAUX D'INTÉRÊT ─────────
 // Niveaux de taux sans risque par devise (en %), collés par l'utilisateur ; le Δ (bp) entre deux dates
 // est appliqué à la Duration (défaut) ou au Rho (10bp) de chaque obligation selon sa devise.
-let rateLevels={},rateSens='duration';
+let rateLevels={},rateSens='cbdur';
 function parseDateAny(v){
   if(v instanceof Date&&!isNaN(v))return v.toISOString().slice(0,10);
   const s=String(v??'').trim();let m;
@@ -339,7 +339,29 @@ function rateLevelAt(ccy,date){const a=rateLevels[ccy];if(!a||!a.length||!date)r
   for(let i=1;i<a.length;i++){if(a[i].date>=date){const p=a[i-1],q=a[i];if(q.date===p.date)return q.v;
     const t=(Date.parse(date)-Date.parse(p.date))/(Date.parse(q.date)-Date.parse(p.date));return p.v+(q.v-p.v)*t}}
   return last.v}
-function rateMoveBp(ccy,d0,d1){const a=rateLevelAt(ccy,d0),b=rateLevelAt(ccy,d1);return(a==null||b==null)?null:(b-a)*100}
+// Devises indexées : sans niveau propre, on reprend le Δ de la devise d'ancrage (HKD indexé sur l'USD)
+const RATE_PROXY={HKD:'USD'};
+function rateSeriesCcy(ccy){return rateLevels[ccy]&&rateLevels[ccy].length?ccy:(RATE_PROXY[ccy]&&rateLevels[RATE_PROXY[ccy]]&&rateLevels[RATE_PROXY[ccy]].length?RATE_PROXY[ccy]:null)}
+// Plancher obligataire (% du nominal) : coupons annuels + remboursement au pair, actualisés au taux sans risque
+// de la devise (niveau du tableau à la date, 3 % par défaut) + spread de crédit du fichier. null si maturité/date inconnue.
+const DEFAULT_RF=3;
+function bondFloorPct(b,d0){
+  const mat=parseDateAny(b.maturity);if(!mat||!d0)return null;
+  const T=(Date.parse(mat)-Date.parse(d0))/(365.25*86400000);if(!(T>0))return null;
+  const sc=rateSeriesCcy(b.bondCcy);const rf=sc!=null?rateLevelAt(sc,d0):null;
+  const y=((rf!=null?rf:DEFAULT_RF)+((b.creditSpread>0&&!isNaN(b.creditSpread))?b.creditSpread/100:0))/100;
+  const c=(b.coupon>0&&!isNaN(b.coupon))?b.coupon:0;let pv=100/Math.pow(1+y,T);
+  for(let t=T;t>0;t-=1)pv+=c/Math.pow(1+y,t);
+  return pv}
+// Sensibilité taux effective d'une CB (années) : seule la part obligataire réagit aux taux.
+// dP/P = −D × (Plancher/P) × (1−Δ) × Δr — la hausse des taux baisse le plancher, mais l'option d'échange
+// (action contre obligation) gagne en valeur, ce qui compense à hauteur du delta.
+function cbRateDuration(b,d0){
+  const D=(b.duration>0&&!isNaN(b.duration))?b.duration:0;if(!D)return 0;
+  const dl=Math.min(1,Math.max(0,(isNaN(b.delta)?0:b.delta)/100));
+  const bf=bondFloorPct(b,d0);const ratio=(bf!=null&&b.cbPrice>0)?Math.min(1,bf/b.cbPrice):1;
+  return D*(1-dl)*ratio}
+function rateMoveBp(ccy,d0,d1){ccy=rateSeriesCcy(ccy);if(ccy==null)return null;const a=rateLevelAt(ccy,d0),b=rateLevelAt(ccy,d1);return(a==null||b==null)?null:(b-a)*100}
 // Devises dont le tableau ne couvre pas [d0,d1] : au-delà des bornes le niveau est plat, donc le mouvement y est perdu
 function rateRangeGaps(ccys,d0,d1){const out=[];ccys.forEach(c=>{const a=rateLevels[c];if(!a||!a.length||!d0||!d1)return;
   const lo=a[0].date,hi=a[a.length-1].date;if(d0<lo||d1>hi)out.push(c+' ('+lo+' → '+hi+')')});return out}
@@ -349,6 +371,7 @@ function rateMovesFor(ccys,d0,d1){const o={};ccys.forEach(c=>{const m=rateMoveBp
 function ccysOf(bonds){return[...new Set((bonds||[]).map(b=>(b.bondCcy||'').trim()).filter(Boolean))].sort()}
 // % du poids de l'index dont la devise dispose d'un Δ taux
 function rateCoverage(bonds,moves){const w=(bonds||[]).reduce((a,b)=>a+(b.weight||0),0);const c=(bonds||[]).reduce((a,b)=>a+((moves&&moves[b.bondCcy]!=null)?(b.weight||0):0),0);return w?c/w*100:0}
+function rateSensLabel(){return rateSens==='rho'?'Rho (10bp)':rateSens==='cbdur'?'Duration ajustée CB':'Duration brute'}
 function setRateStatus(id,text,cls){const el=document.getElementById(id);if(!el)return;el.textContent=text;el.className='rates-status'+(cls?' '+cls:'')}
 function saveRatePrefs(){try{localStorage.setItem('cbattr_rateLevels',document.getElementById('rateLevelsD').value);localStorage.setItem('cbattr_rateSens',rateSens)}catch(e){}}
 
@@ -394,7 +417,9 @@ function computeAttr(t0,t1,aux,rateMoves,d0,d1){
     const vC=toPct((b0.vega||0)*((b1.impliedVol||0)-(b0.impliedVol||0)));
     // Taux : Δr (bp) de la devise de l'obligation ; Duration (années) → −D×Δr, ou Rho (10bp, points de prix) → Rho×Δr/10
     const dr=(rateMoves&&rateMoves[b0.bondCcy]!=null&&!isNaN(rateMoves[b0.bondCcy]))?rateMoves[b0.bondCcy]:0;
-    const rC=!validP?0:rateSens==='rho'?toPct((b0.rho||0)*(dr/10)):(-(b0.duration||0)*dr/100);
+    // Défaut 'cbdur' : duration ajustée CB (voir cbRateDuration) ; 'duration' = duration brute du plancher appliquée à tout le prix
+    const rDur=rateSens==='cbdur'?cbRateDuration(b0,d0):(b0.duration||0);
+    const rC=!validP?0:rateSens==='rho'?toPct((b0.rho||0)*(dr/10)):(-rDur*dr/100);
     // Carry : coupon couru ACT/365 sur la période, en % du prix (le prix FTSE est un prix clean, l'indice est total return)
     const carryC=(validP&&days>0&&b0.coupon>0&&!isNaN(b0.coupon))?(b0.coupon*days/365)/p0*100:0;
     const fx=fxRatio[b0.bondCcy]||1;
@@ -404,7 +429,7 @@ function computeAttr(t0,t1,aux,rateMoves,d0,d1){
     results.push({...b0,leftIndex,cbPrice_t1:b1.cbPrice,eqPrice_t1:b1.eqPrice,spread_t1:b1.creditSpread,ivol_t1:b1.impliedVol,weight_t1:leftIndex?0:b1.weight,
       cbPnl,cbRetPct,totRetPct,eqRetPct:eqR,parityRetPct:parR,days,eqContrib:eqC,gammaContrib:gaC,creditContrib:sC,vegaContrib:vC,rateContrib:rC,rateChange:dr,carryContrib:carryC,fxContrib:fxC,
       spreadChange:(b1.creditSpread||0)-(b0.creditSpread||0),volChange:(b1.impliedVol||0)-(b0.impliedVol||0),
-      residual:res,w,wtdTotal:w*totRetPct,wtdEquity:w*eqC,wtdGamma:w*gaC,wtdCredit:w*sC,wtdVega:w*vC,wtdRate:w*rC,wtdCarry:w*carryC,wtdFX:w*fxC,wtdResidual:w*res});});
+      rateDurEff:rateSens==='rho'?null:rDur,residual:res,w,wtdTotal:w*totRetPct,wtdEquity:w*eqC,wtdGamma:w*gaC,wtdCredit:w*sC,wtdVega:w*vC,wtdRate:w*rC,wtdCarry:w*carryC,wtdFX:w*fxC,wtdResidual:w*res});});
   return{results,entering,leaving,leftCovered,leftUncovered};
 }
 
@@ -655,7 +680,8 @@ function renderRateCcyRow(){
     const tbl=rateMoveBp(c,dDates.t0,dDates.t1);const ov=dRateOverride[c];
     const v=(ov!=null&&!isNaN(ov))?ov:tbl;
     const src=(ov!=null&&!isNaN(ov))?'✎':(tbl!=null?'▤':'');
-    const title=(ov!=null&&!isNaN(ov))?'Saisie manuelle':(tbl!=null?'Déduit du tableau de niveaux':'');
+    const px=(tbl!=null&&rateSeriesCcy(c)!==c)?' (proxy '+rateSeriesCcy(c)+')':'';
+    const title=(ov!=null&&!isNaN(ov))?'Saisie manuelle':(tbl!=null?'Déduit du tableau de niveaux'+px:'');
     return`<div class="rates-ccy" title="${esc(c)} — ${(w[c]||0).toFixed(1)}% du poids"><span class="ccy">${esc(c)}</span><input type="text" data-ccy="${esc(c)}" placeholder="0" value="${v==null?'':(+v).toFixed(1)}"><span class="unit">bp</span>${src?'<span class="src" title="'+title+'">'+src+'</span>':''}</div>`}).join('');
   row.querySelectorAll('input[data-ccy]').forEach(inp=>{
     inp.addEventListener('change',()=>{const c=inp.dataset.ccy;const v=parseFloat(inp.value.replace(',','.'));if(inp.value.trim()===''||isNaN(v))delete dRateOverride[c];else dRateOverride[c]=v;renderRateCcyRow();recomputeDaily()});
@@ -665,7 +691,7 @@ function updateRateStatusD(){
   const rm=dailyRateMoves();const cov=rateCoverage(bondsT0,rm);const miss=ccysOf(bondsT0).filter(c=>rm[c]==null);
   if(!Object.keys(rm).length)setRateStatus('rateStatusD','non renseignés — contribution taux = 0 (reste dans le résiduel)','warn');
   else{const gaps=rateRangeGaps(Object.keys(rm).filter(c=>dRateOverride[c]==null),dDates.t0,dDates.t1);
-    setRateStatus('rateStatusD',(rateSens==='rho'?'Rho (10bp)':'Duration')+' · '+Object.keys(rm).map(c=>c+' '+fS(rm[c],1)+'bp').join(', ')+' · couverture '+cov.toFixed(1)+'% du poids'+(miss.length?' — sans donnée : '+miss.join(', '):'')+(gaps.length?' — ⚠ dates hors tableau, niveau supposé plat : '+gaps.join(', '):''),(miss.length||gaps.length)?'warn':'ok')}}
+    setRateStatus('rateStatusD',rateSensLabel()+' · '+Object.keys(rm).map(c=>c+' '+fS(rm[c],1)+'bp').join(', ')+' · couverture '+cov.toFixed(1)+'% du poids'+(miss.length?' — sans donnée : '+miss.join(', '):'')+(gaps.length?' — ⚠ dates hors tableau, niveau supposé plat : '+gaps.join(', '):''),(miss.length||gaps.length)?'warn':'ok')}}
 function recomputeDaily(){updateRateStatusD();if(bondsT0&&bondsT1){dData=computeAttr(bondsT0,bondsT1,bondsAux,dailyRateMoves(),dDates.t0,dDates.t1);renderDaily()}}
 
 document.getElementById('applyPerfD').addEventListener('click',()=>{const v=parseFloat(document.getElementById('realPerfD').value.replace(',','.'));dRealPerf=isNaN(v)?null:v;const st=document.getElementById('perfStatusD');if(dRealPerf!==null){st.classList.remove('hidden');st.textContent='✓ '+fP(dRealPerf)+' bps'}else st.classList.add('hidden');if(dData)renderDaily()});
@@ -1080,7 +1106,7 @@ const legVals=r=>LEGS.map(k=>(r[k]||0)*100);
 const num0=v=>(v==null||isNaN(v))?'':v;
 function legSummaryRows(t,realPerf){
   const rows=[['Facteur','Contribution (bps)'],['Equity / Delta',t.wtdEquity*100],['Gamma',t.wtdGamma*100],['Crédit / Spread',t.wtdCredit*100],['Vega / Vol',t.wtdVega*100],
-    ['Taux ('+(rateSens==='rho'?'Rho 10bp':'Duration')+')',t.wtdRate*100],['Carry (coupon couru)',t.wtdCarry*100],['FX',t.wtdFX*100],['Résiduel (Theta/convexité/autre)',t.wtdResidual*100],['Total Théorique',t.wtdTotal*100]];
+    ['Taux ('+rateSensLabel()+')',t.wtdRate*100],['Carry (coupon couru)',t.wtdCarry*100],['FX',t.wtdFX*100],['Résiduel (Theta/convexité/autre)',t.wtdResidual*100],['Total Théorique',t.wtdTotal*100]];
   if(realPerf!=null)rows.push([],['Performance Réelle',realPerf*100],['Écart',(realPerf-t.wtdTotal)*100]);
   return rows;}
 function appendGroupSheets(wb,bonds,wLabel){
@@ -1139,7 +1165,7 @@ function updateRateStatusM(){
   const ccys=ccysOf(Object.values(mBonds).flat());const covered=ccys.filter(c=>mDailyAttr.some(d=>d.rateMoves&&d.rateMoves[c]!=null));const miss=ccys.filter(c=>!covered.includes(c));
   const avgCov=mDailyAttr.reduce((a,d)=>a+(d.rateCov||0),0)/mDailyAttr.length;
   const d0=mDailyAttr[0].from,d1=mDailyAttr[mDailyAttr.length-1].date;const gaps=rateRangeGaps(covered,d0,d1);
-  setRateStatus('rateStatusM',(rateSens==='rho'?'Rho (10bp)':'Duration')+' · Δ sur la période '+d0+' → '+d1+' : '+ratePeriodMoves(covered,d0,d1)+' · '+nd+'/'+mDailyAttr.length+' jours · couverture moy. '+avgCov.toFixed(1)+'% du poids'+(miss.length?' — sans donnée : '+miss.join(', '):'')+(gaps.length?' — ⚠ tableau ne couvrant pas toute la période, niveau supposé plat au-delà : '+gaps.join(', '):''),(miss.length||nd<mDailyAttr.length||gaps.length)?'warn':'ok');}
+  setRateStatus('rateStatusM',rateSensLabel()+' · Δ sur la période '+d0+' → '+d1+' : '+ratePeriodMoves(covered,d0,d1)+' · '+nd+'/'+mDailyAttr.length+' jours · couverture moy. '+avgCov.toFixed(1)+'% du poids'+(miss.length?' — sans donnée : '+miss.join(', '):'')+(gaps.length?' — ⚠ tableau ne couvrant pas toute la période, niveau supposé plat au-delà : '+gaps.join(', '):''),(miss.length||nd<mDailyAttr.length||gaps.length)?'warn':'ok');}
 function recomputeAll(){if(bondsT0)renderRateCcyRow();recomputeDaily();if(Object.keys(mBonds).length>=2)computeMonthly();else updateRateStatusM();}
 function onRateLevelsInput(src){
   const txt=src.value;document.querySelectorAll('textarea.rate-levels').forEach(t=>{if(t!==src)t.value=txt});
@@ -1148,7 +1174,9 @@ document.querySelectorAll('textarea.rate-levels').forEach(t=>{t.addEventListener
 document.querySelectorAll('select.rate-sens').forEach(sel=>{sel.addEventListener('change',()=>{rateSens=sel.value;document.querySelectorAll('select.rate-sens').forEach(x=>x.value=rateSens);saveRatePrefs();recomputeAll()})});
 // Restauration (localStorage) du tableau de niveaux et du choix de sensibilité
 try{const sv=localStorage.getItem('cbattr_rateLevels');const ss=localStorage.getItem('cbattr_rateSens');
-  if(ss==='rho'||ss==='duration'){rateSens=ss;document.querySelectorAll('select.rate-sens').forEach(x=>x.value=rateSens)}
+  // v2 : la duration brute (ancien défaut) surestime l'effet taux d'environ ×2–3 → bascule une fois vers la duration ajustée CB
+  const v2=localStorage.getItem('cbattr_rateSensV2');let s2=ss;if(!v2&&ss==='duration')s2='cbdur';localStorage.setItem('cbattr_rateSensV2','1');
+  if(s2==='rho'||s2==='duration'||s2==='cbdur'){rateSens=s2;document.querySelectorAll('select.rate-sens').forEach(x=>x.value=rateSens)}
   if(sv){document.querySelectorAll('textarea.rate-levels').forEach(t=>t.value=sv);rateLevels=parseRateLevels(sv)}
   updateRateStatusM();}catch(e){}
 

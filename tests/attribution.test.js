@@ -70,6 +70,21 @@ await page.fill('#rateLevelsD','Date\tUSD\n2026-08-20\t4.18\n2026-08-31\t4.80');
 r=await byCcy();near(r.USD.rateChange,0,1e-9,'plat hors tableau');assert.ok((await page.textContent('#rateStatusD')).includes('hors tableau'),'avertissement hors tableau');
 await page.fill('#rateLevelsD','Date\tUSD\tEUR\n2026-08-31\t3.62\t2.31\n2026-09-01\t3.54\t2.36\n2026-09-02\t3.60\t2.30');
 r=await byCcy();
+// Défaut : duration ajustée CB = D × (1−Δ) × min(1, Plancher/P), plancher actualisé à (taux devise + spread)
+assert.strictEqual(await page.inputValue('#rateSensD'),'cbdur','défaut duration ajustée CB');
+const bfRef=(cpn,rf,spd,d0)=>{const T=(Date.UTC(2029,5,15)-Date.parse(d0))/(365.25*86400000);const y=(rf+spd/100)/100;let pv=100/Math.pow(1+y,T);for(let t=T;t>0;t-=1)pv+=cpn/Math.pow(1+y,t);return pv};
+const dCb=(dur,dl,bf,p)=>dur*(1-dl/100)*Math.min(1,bf/p);
+near(r.USD.rateContrib,-dCb(3.5,60,bfRef(1.5,3.62,250,'2026-08-31'),100)*-8/100,1e-9,'taux CB USD');
+near(r.EUR.rateContrib,-dCb(2.8,35,bfRef(0,2.31,180,'2026-08-31'),95)*5/100,1e-9,'taux CB EUR');
+near(r.USD.rateDurEff,dCb(3.5,60,bfRef(1.5,3.62,250,'2026-08-31'),100),1e-9,'duration effective exposée');
+assert.ok(r.USD.rateDurEff<3.5*0.4+1e-12&&r.USD.rateDurEff>0,'D_CB < D×(1−Δ)');
+// JPY sans niveau : taux par défaut 3 % pour le plancher (contribution nulle tant que Δr absent)
+near(r.JPY.rateContrib,0,1e-12,'taux JPY absent (CB)');
+// Proxy HKD → USD (peg) ; aucune devise sans proxy
+assert.strictEqual(await page.evaluate(()=>rateMoveBp('HKD','2026-08-31','2026-09-01')),await page.evaluate(()=>rateMoveBp('USD','2026-08-31','2026-09-01')),'proxy HKD');
+assert.strictEqual(await page.evaluate(()=>rateMoveBp('TWD','2026-08-31','2026-09-01')),null,'TWD sans proxy');
+// Variante duration brute (ancien calcul)
+await page.selectOption('#rateSensD','duration');r=await byCcy();
 near(r.USD.rateContrib,-3.5*-8/100,1e-9,'taux duration USD');near(r.EUR.rateContrib,-2.8*5/100,1e-9,'taux duration EUR');near(r.JPY.rateContrib,0,1e-12,'taux JPY absent');
 assert.ok((await page.textContent('#rateStatusD')).includes('sans donnée : JPY'),'statut devises manquantes');
 // Saisie manuelle JPY +3bp
@@ -79,7 +94,7 @@ r=await byCcy();near(r.JPY.rateContrib,-1.2*3/100,1e-9,'taux JPY manuel');
 await page.selectOption('#rateSensD','rho');r=await byCcy();
 near(r.USD.rateContrib,(-0.30*-8/10)/100*100,1e-9,'taux rho USD');near(r.EUR.rateContrib,(-0.45*5/10)/95*100,1e-9,'taux rho EUR');
 assert.strictEqual(await page.inputValue('#rateSensM'),'rho','sélecteur synchronisé');
-await page.selectOption('#rateSensD','duration');
+await page.selectOption('#rateSensD','cbdur');
 // Totaux pondérés = Σ poids × contribution
 const tot=await page.evaluate(()=>sumResults(dData.results));
 r=await byCcy();near(tot.wtdRate,0.4*r.USD.rateContrib+0.35*r.EUR.rateContrib+0.25*r.JPY.rateContrib,1e-9,'wtdRate');

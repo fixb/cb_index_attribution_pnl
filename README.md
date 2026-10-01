@@ -17,7 +17,7 @@ Toutes les contributions sont en rendement (% du prix CB en T₀) pondéré par 
 | Gamma | ½ × Gamma × Parité₀ × (ΔParité/Parité)² / CB₀ |
 | Crédit | Rho(10bp) × ΔSpread/10 / CB₀ |
 | Vega | Vega × ΔVol implicite / CB₀ |
-| Taux | −Duration × Δr, ou Rho(10bp) × Δr/10 / CB₀ ; Δr (bp) par devise saisi ou déduit d'un tableau de niveaux collé depuis Excel (interpolation linéaire entre les dates du tableau) |
+| Taux | −D_CB × Δr avec D_CB = Duration × (1 − Δ) × min(1, Plancher/CB₀) (défaut) ; variantes −Duration × Δr (duration brute) ou Rho(10bp) × Δr/10 / CB₀ ; HKD sans niveau → Δ USD (peg) ; Δr (bp) par devise saisi ou déduit d'un tableau de niveaux collé depuis Excel (interpolation linéaire entre les dates du tableau) |
 | Carry | Coupon × jours calendaires / 365 / CB₀ |
 | FX | Change devise → devise index, déduit par devise de la médiane des ratios ΔMarket Cap USD / ΔPrix |
 | Résiduel | Rendement total − Σ jambes (theta, convexité, termes croisés) |
