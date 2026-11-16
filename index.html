@@ -437,10 +437,15 @@ function groupBy(res,key){const g={};res.forEach(r=>{const k=r[key]||'Unknown';i
   const x=g[k];x.weight+=r.weight||0;x.count++;x.wtdTotal+=r.wtdTotal;x.wtdEquity+=r.wtdEquity;x.wtdGamma+=r.wtdGamma;x.wtdCredit+=r.wtdCredit;x.wtdVega+=r.wtdVega;x.wtdRate+=(r.wtdRate||0);x.wtdCarry+=(r.wtdCarry||0);x.wtdFX+=(r.wtdFX||0);x.wtdResidual+=r.wtdResidual});
   return Object.values(g).sort((a,b)=>b.wtdTotal-a.wtdTotal);}
 
+// Alias d'émetteurs : noms différents dans le fichier index pour un même émetteur (clé = nom normalisé, valeur = nom affiché)
+const ISSUER_ALIASES={'nebius group':'Nebius','nebius':'Nebius',
+  'halozyme thera':'Halozyme Therapeutics','halozyme therapeutic':'Halozyme Therapeutics','halozyme therapeutics':'Halozyme Therapeutics'};
+const normIssuer=s=>String(s||'').toLowerCase().replace(/[.,]/g,' ').replace(/\b(n ?v|inc|ltd|plc|corp|sa|ag|se)\b/g,' ').replace(/\s+/g,' ').trim();
+function issuerName(issue){if(!issue)return 'Unknown';return ISSUER_ALIASES[normIssuer(issue)]||issue;}
 function groupByIssuer(res){
   const g={};
   res.forEach(r=>{
-    const k=r.issue||'Unknown';
+    const k=issuerName(r.issue);
     if(!g[k])g[k]={name:k,sector:r.sector||'',region:r.region||'',bondCcy:r.bondCcy||'',weight:0,count:0,
       bonds:[],wtdTotal:0,wtdEquity:0,wtdGamma:0,wtdCredit:0,wtdVega:0,wtdRate:0,wtdCarry:0,wtdFX:0,wtdResidual:0};
     const x=g[k];x.weight+=r.weight||0;x.count++;
